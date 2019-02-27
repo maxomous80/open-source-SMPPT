@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SMPPT</title>
+<link rel="stylesheet" href="style.css" media="screen"/>
+</head>
+<nav class="cls-nav-top">
+  <ul class="cls-menu-top">
+     <li class="cls-menu-top-logo"><img src="logoENEA.png"></li>
+     <li class="cls-menu-top-item"><a href="index.html">SMPPT Status</a></li>
+     <li class="cls-menu-top-item"><a href="smppt.html">SMPPT Settings</a></li>
+     <li class="cls-menu-top-item"><a href="wstatus.html">WiFi Status</a></li>
+     <li class="cls-menu-top-item"><a href="ap.html">Access Point</a></li>
+     <li class="cls-menu-top-item"><a href="sta.html">Station</a></li>
+  </ul>
+</nav>
+<body>
+<script>
+  var myStoredSettings = null;
+  var myCurrentSettings = { settings: { "ssid": null, "channel": null, "security": null, "password": null, "ip_address": null, "ip_netmask": null, "dhcp_enabled": null, "dhcp_range": null, "dns_enabled": null, "dns_anyurl": null, "dns_url": null } };
+
+  function swap32(val) {
+    return (((val & 0xFF) << 24)
+      | ((val & 0xFF00) << 8)
+      | ((val >> 8) & 0xFF00)
+      | ((val >> 24) & 0xFF)) >>> 0;
+  }
+
+  function dot2num(dot) {
+    var d = dot.split('.');
+    return ((((((+d[0]) * 256) + (+d[1])) * 256) + (+d[2])) * 256) + (+d[3]);
+  }
+
+  function num2dot(num) {
+    var d = num % 256;
+    for (var i = 3; i > 0; i--) {
+      num = Math.floor(num / 256);
+      d = num % 256 + '.' + d;
+    }
+    return d;
+  }
+
+  function onSecurityChange() {
+    var elem = document.getElementById("id-select-security");
+    if(elem.selectedIndex) {
+      document.getElementById("id-div-security").style.display = "block";
+    }
+    else {
+      document.getElementById("id-div-security").style.display = "none";
+    }
+  }
+
+  function onDhcpChange() {
+    if(document.getElementById("id-input-dhcp-enabled").checked) {
+      document.getElementById("id-div-dhcp").style.display = "block";
+    }
+    else {
+      document.getElementById("id-div-dhcp").style.display = "none";
+    }
+  }
+
+  function onDnsChange() {
+    if(document.getElementById("id-input-dns-enabled").checked) {
+      document.getElementById("id-div-dns").style.display = "block";
+    }
+    else {
+      document.getElementById("id-div-dns").style.display = "none";
+    }
+  }
+
+  function retrieveSettings(settings) {
+    settings.settings.ssid = document.getElementById("id-input-ssid").value;
+    settings.settings.channel = document.getElementById("id-select-channel").selectedIndex + 1;
+    settings.settings.security = document.getElementById("id-select-security").selectedIndex;
+    settings.settings.password = document.getElementById("id-input-password").value;
+    settings.settings.ip_address = swap32(dot2num(document.getElementById("id-input-ip-address").value));
+    settings.settings.ip_netmask = swap32(dot2num(document.getElementById("id-input-ip-netmask").value));
+    settings.settings.dhcp_enabled = document.getElementById("id-input-dhcp-enabled").checked ? 1 : 0;
+    settings.settings.dhcp_range = swap32(dot2num(document.getElementById("id-input-dhcp-range").value));
+    settings.settings.dns_enabled = document.getElementById("id-input-dns-enabled").checked ? 1 : 0;
+    settings.settings.dns_anyurl = document.getElementById("id-input-dns-anyurl").checked ? 1 : 0;
+    settings.settings.dns_url = document.getElementById("id-input-dns-url").value;
+  }
+
+  function updateSettings(settings) {
+    document.getElementById("id-input-ssid").value = settings.settings.ssid;
+    document.getElementById("id-select-channel").selectedIndex = settings.settings.channel - 1;
+    document.getElementById("id-select-security").selectedIndex = settings.settings.security;
+    document.getElementById("id-input-password").value = settings.settings.password;
+    document.getElementById("id-input-ip-address").value = num2dot(swap32(settings.settings.ip_address));
+    document.getElementById("id-input-ip-netmask").value = num2dot(swap32(settings.settings.ip_netmask));
+    document.getElementById("id-input-dhcp-enabled").checked = settings.settings.dhcp_enabled;
+    document.getElementById("id-input-dhcp-range").value = num2dot(swap32(settings.settings.dhcp_range));
+    document.getElementById("id-input-dns-enabled").checked = settings.settings.dns_enabled;
+    document.getElementById("id-input-dns-anyurl").checked = settings.settings.dns_anyurl;
+    document.getElementById("id-input-dns-url").value = settings.settings.dns_url;
+
+    onSecurityChange();
+    onDhcpChange();
+    onDnsChange();
+  }
+
+  function doGetSettings() {
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        if (xhr.status === 200) {
+          myStoredSettings = JSON.parse(xhr.responseText);
+          updateSettings(myStoredSettings);
+        }
+      }
+    };
+    xhr.open("GET", "/api/ap/settings", true);
+    xhr.send();
+  }
+
+  function doReboot() {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "/api/reboot", true);
+    xhr.send();
+  }
+
+  function doStoreMode(value) {
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/mode", false);
+    xhr.send(value);
+  }
+
+  function doStoreSetting(key, value) {
+    var xhr = new XMLHttpRequest();
+    var item = key.replace(/_/g, "/");
+    xhr.open("POST", "/api/ap/settings/" + item, false);
+    xhr.send(value);
+  }
+
+  function doApply() {
+    var test = validateSSID() * validatePassword() * validateDNSURL();
+	if (test == 1) {	
+		retrieveSettings(myCurrentSettings);
+		for (key in myCurrentSettings.settings) {
+		  if (myCurrentSettings.settings[key] !== myStoredSettings.settings[key]) {
+			doStoreSetting(key, myCurrentSettings.settings[key]);
+			myStoredSettings.settings[key] = myCurrentSettings.settings[key];
+		  }
+		}
+		doStoreMode(2);
+		doReboot();
+	}
+	
+  }
+
+/*
+  Validate the length of input SSID is less than 32 characters
+*/  
+  function validateSSID() {
+	var ssidLength = document.getElementById("id-input-ssid").value.length;
+	if (ssidLength > 32) {
+        document.getElementById("validateSSID").innerHTML = 
+        "The maximum length of SSID is 32 characters";
+        return 0;
+    }
+	else {	
+		document.getElementById("validateSSID").innerHTML = "";
+		return 1;
+	}
+  }
+
+/*
+  Validate the length of input Password for WPA, WPA2 and WEP
+*/  
+  function validatePassword() {	
+	var securityMode = document.getElementById("id-select-security").selectedIndex;
+	var passwordLength = document.getElementById("id-input-password").value.length;
+	if (securityMode == 3) {
+		if (passwordLength != 5 && passwordLength != 10 && passwordLength != 13 && passwordLength != 26){
+			document.getElementById("validatePassword").innerHTML = 
+			"The password length for WEP can be only 5, 10, 13 or 26 characters";
+			return 0;
+		}
+		else {
+			document.getElementById("validatePassword").innerHTML = "";
+			return 1;
+		}
+	}
+	if (securityMode == 1 || securityMode == 2 ||securityMode == 4 ) {
+		if (passwordLength < 8 || passwordLength > 63){
+			document.getElementById("validatePassword").innerHTML = 
+			"The password length for WPA or WPA2 should be in the range of 8 to 63 characters";
+			return 0;
+		}
+		else{
+			document.getElementById("validatePassword").innerHTML = "";
+			return 1;
+		}
+	}
+	else {
+		document.getElementById("validatePassword").innerHTML = "";
+		return 1;
+	}
+  }
+
+/*
+  Validate the length of input DNS URL is not larger than 32 bytes
+*/  
+  function validateDNSURL() {
+	var dnsURLLength = document.getElementById("id-input-dns-url").value.length;
+	if (dnsURLLength > 32) {
+        document.getElementById("validateDNSURL").innerHTML = 
+        "The length of DNS URL should not be larger than 32 characters";
+        return 0;
+    }
+	else {
+		document.getElementById("validateDNSURL").innerHTML = "";
+		return 1;
+	}
+  }	
+
+  window.onload = function() {
+    doGetSettings();
+  };
+</script>
+<h1 class="cls-heading">Access point configuration:</h1>
+
+<p id="validateSSID"></p>
+<p id="validatePassword"></p>
+<p id="validateDNSURL"></p>
+
+<form class="cls-form-setting">
+  <label class="cls-label-setting" for="id-input-ssid" id="id-label-ssid">SSID:</label>
+  <input class="cls-input-setting" name="ssid" id="id-input-ssid" type="text"><br>
+  <label class="cls-label-setting" for="id-select-channel" id="id-label-channel">Channel:</label>
+  <select name="channel" id="id-select-channel">
+    <option value="1">1</option>
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+    <option value="5">5</option>
+    <option value="6">6</option>
+    <option value="7">7</option>
+    <option value="8">8</option>
+    <option value="9">9</option>
+    <option value="10">10</option>
+    <option value="11">11</option>
+  </select><br>
+  <label class="cls-label-setting" for="id-input-security" id="id-label-security">Security:</label>
+  <select name="security" id="id-select-security" onchange="onSecurityChange()">
+    <option>Open</option>
+    <option>WPA-PSK</option>
+    <option>WPA2-PSK</option>
+    <option>WEP</option>
+  </select><br>
+  <div id="id-div-security" style="display:none">
+    <label class="cls-label-setting" for="id-input-password" id="id-label-password">Password:</label>
+    <input class="cls-input-setting" name="password" id="id-input-password" type="password"><br>
+  </div>
+  <label class="cls-label-setting" for="id-input-ip-address" id="id-label-ip-address">IP address:</label>
+  <input class="cls-input-setting" name="ip-address" id="id-input-ip-address" type="text"><br>
+  <label class="cls-label-setting" for="id-input-ip-netmask" id="id-label-ip-netmask">IP netmask:</label>
+  <input class="cls-input-setting" name="ip-netmask" id="id-input-ip-netmask" type="text"><br>
+  <label class="cls-label-setting" for="id-input-dhcp-enabled" id="id-label-dhcp-enabled">DHCP:</label>
+  <input class="cls-input-setting" name="dhcp-enabled" id="id-input-dhcp-enabled" type="checkbox" onchange="onDhcpChange()"><br>
+  <div id="id-div-dhcp" style="display:none">
+    <label class="cls-label-setting" for="id-input-dhcp-range" id="id-label-dhcp-range">DHCP range:</label>
+    <input class="cls-input-setting" name="dhcp-range" id="id-input-dhcp-range" type="text"><br>
+  </div>
+  <label class="cls-label-setting" for="id-input-dns-enabled" id="id-label-dns-enabled">DNS:</label>
+  <input class="cls-input-setting" name="dns-enabled" id="id-input-dns-enabled" type="checkbox" onchange="onDnsChange()"><br>
+  <div id="id-div-dns" style="display:none">
+    <label class="cls-label-setting" for="id-input-dns-anyurl" id="id-label-dns-anyurl">DNS AnyUrl:</label>
+    <input class="cls-input-setting" name="dhcp-anyurl" id="id-input-dns-anyurl" type="checkbox"><br>
+    <label class="cls-label-setting" for="id-input-dns-url" id="id-label-dns-url">DNS url:</label>
+    <input class="cls-input-setting" name="dhcp-url" id="id-input-dns-url" type="text"><br>
+  </div>
+  <button class="cls-input-action-button" name="apply" formaction="javascript:doApply();">Apply</button>
+</form>
+</body>
+</html>

@@ -1,0 +1,954 @@
+# api.bgs - REST API script file for HTTP server example
+
+# Constant
+const API_STORE_TYPE_INTEGER = 0                   # Store request type for an integer value
+const API_STORE_TYPE_STRING  = 1                   # Store request type for a string
+const API_STORE_TYPE_NONE = 2                      # Store request type for an unknown type
+const API_STORE_TYPE_SMPPT_PARAM = 3               # Send to MCU a request type for a SMPPT parameter
+
+# Variables
+dim api_resp(255)                                  # Buffer for response
+dim api_resp_len                                   # Buffer length
+dim api_resp_iter                                  # Loop variable
+dim api_local_temp                                 # Temporary variable
+dim api_networks_request                           # ID of the pending networks request
+dim api_store_request                              # ID of the pending store request
+dim api_store_request_type                         # Type of the pending store request
+dim api_store_request_key                          # Key of the pending store request
+dim api_store_request_data_len                     # Data length of the pending store request
+dim api_store_request_data(255)                    # Data of the pending store request
+dim api_store_request_smppt_key_len                # Key lenght of the pending SMPPT store request
+dim api_store_request_smppt_key(10)                # Key of the pending SMPPT store request
+dim api_req_handled                                # Whether API request was handled
+
+# Constants
+const API_STATUS_RESOURCE_LEN = 11
+const API_STATUS_RESOURCE() = "/api/status"
+const API_REBOOT_RESOURCE_LEN = 11
+const API_REBOOT_RESOURCE() = "/api/reboot"
+const API_NETWORKS_RESOURCE_LEN = 13
+const API_NETWORKS_RESOURCE() = "/api/networks"
+const API_AP_SETTINGS_RESOURCE_LEN = 16
+const API_AP_SETTINGS_RESOURCE() = "/api/ap/settings"
+const API_STA_SETTINGS_RESOURCE_LEN = 17
+const API_STA_SETTINGS_RESOURCE() = "/api/sta/settings"
+const API_AP_SETTINGS_ITEM_RESOURCE_LEN = 17
+const API_AP_SETTINGS_ITEM_RESOURCE() = "/api/ap/settings/"
+const API_STA_SETTINGS_ITEM_RESOURCE_LEN = 18
+const API_STA_SETTINGS_ITEM_RESOURCE() = "/api/sta/settings/"
+const API_MODE_RESOURCE_LEN = 9
+const API_MODE_RESOURCE() = "/api/mode"
+const API_PARAM_SSID_LEN = 4
+const API_PARAM_SSID() = "ssid"
+const API_PARAM_CHANNEL_LEN = 7
+const API_PARAM_CHANNEL() = "channel"
+const API_PARAM_SECURITY_LEN = 8
+const API_PARAM_SECURITY() = "security"
+const API_PARAM_PASSWORD_LEN = 8
+const API_PARAM_PASSWORD() = "password"
+const API_PARAM_IP_ADDRESS_LEN = 10
+const API_PARAM_IP_ADDRESS() = "ip/address"
+const API_PARAM_IP_NETMASK_LEN = 10
+const API_PARAM_IP_NETMASK() = "ip/netmask"
+const API_PARAM_IP_GATEWAY_LEN = 10
+const API_PARAM_IP_GATEWAY() = "ip/gateway"
+const API_PARAM_DNS_1_ADDRESS_LEN = 13
+const API_PARAM_DNS_1_ADDRESS() = "dns/1/address"
+const API_PARAM_DNS_2_ADDRESS_LEN = 13
+const API_PARAM_DNS_2_ADDRESS() = "dns/2/address"
+const API_PARAM_DHCP_ENABLED_LEN = 12
+const API_PARAM_DHCP_ENABLED() = "dhcp/enabled"
+const API_PARAM_DHCP_RANGE_LEN = 10
+const API_PARAM_DHCP_RANGE() = "dhcp/range"
+const API_PARAM_DNS_ENABLED_LEN = 11
+const API_PARAM_DNS_ENABLED() = "dns/enabled"
+const API_PARAM_DNS_ANYURL_LEN = 10
+const API_PARAM_DNS_ANYURL() = "dns/anyurl"
+const API_PARAM_DNS_URL_LEN = 7
+const API_PARAM_DNS_URL() = "dns/url"
+const API_PARAM_JSON_MODE_LEN = 4
+const API_PARAM_JSON_MODE() = "mode"
+const API_PARAM_JSON_SETTINGS_LEN = 8
+const API_PARAM_JSON_SETTINGS() = "settings"
+const API_PARAM_JSON_SSID_LEN = 4
+const API_PARAM_JSON_SSID() = "ssid"
+const API_PARAM_JSON_BSSID_LEN = 5
+const API_PARAM_JSON_BSSID() = "bssid"
+const API_PARAM_JSON_CHANNEL_LEN = 7
+const API_PARAM_JSON_CHANNEL() = "channel"
+const API_PARAM_JSON_SECURITY_LEN = 8
+const API_PARAM_JSON_SECURITY() = "security"
+const API_PARAM_JSON_NETWORKS_LEN = 8
+const API_PARAM_JSON_NETWORKS() = "networks"
+const API_PARAM_JSON_PASSWORD_LEN = 8
+const API_PARAM_JSON_PASSWORD() = "password"
+const API_PARAM_JSON_DHCP_ENABLED_LEN = 12
+const API_PARAM_JSON_DHCP_ENABLED() = "dhcp_enabled"
+const API_PARAM_JSON_DHCP_RANGE_LEN = 10
+const API_PARAM_JSON_DHCP_RANGE() = "dhcp_range"
+const API_PARAM_JSON_DNS_ENABLED_LEN = 11
+const API_PARAM_JSON_DNS_ENABLED() = "dns_enabled"
+const API_PARAM_JSON_DNS_ANYURL_LEN = 10
+const API_PARAM_JSON_DNS_ANYURL() = "dns_anyurl"
+const API_PARAM_JSON_DNS_URL_LEN = 7
+const API_PARAM_JSON_DNS_URL() = "dns_url"
+const API_PARAM_JSON_IP_ADDRESS_LEN = 10
+const API_PARAM_JSON_IP_ADDRESS() = "ip_address"
+const API_PARAM_JSON_IP_NETMASK_LEN = 10
+const API_PARAM_JSON_IP_NETMASK() = "ip_netmask"
+const API_PARAM_JSON_IP_GATEWAY_LEN = 10
+const API_PARAM_JSON_IP_GATEWAY() = "ip_gateway"
+const API_PARAM_JSON_DNS_1_ADDRESS_LEN = 13
+const API_PARAM_JSON_DNS_1_ADDRESS() = "dns_1_address"
+const API_PARAM_JSON_DNS_2_ADDRESS_LEN = 13
+const API_PARAM_JSON_DNS_2_ADDRESS() = "dns_2_address"
+
+# Procedure for initialising API variables.
+export procedure api_init()
+end
+
+# Procedure for adding a quoted value to the response buffer.
+procedure api_add_json_quoted_value(value_len, value())
+  api_resp(api_resp_len:1) = "\x22"
+  api_resp_len = api_resp_len + 1
+  memcpy(api_resp(api_resp_len), value(0), value_len)
+  api_resp_len = api_resp_len + value_len
+  api_resp(api_resp_len:1) = "\x22"
+  api_resp_len = api_resp_len + 1
+end
+
+# Procedure for adding a value to the response buffer.
+procedure api_add_json_value(value_len, value())
+  memcpy(api_resp(api_resp_len), value(0), value_len)
+  api_resp_len = api_resp_len + value_len
+end
+
+# Procedure for adding an integer to the response buffer.
+procedure api_add_json_integer(value)
+  call util_itoa(value)(cmd_value_len, cmd_value(0:cmd_value_len))
+  memcpy(api_resp(api_resp_len), cmd_value(0), cmd_value_len)
+  api_resp_len = api_resp_len + cmd_value_len
+end
+
+# Procedure for adding an object name to the response buffer.
+procedure api_add_json_object_name(name_len, name())
+  api_resp(api_resp_len:1) = "\x22"
+  api_resp_len = api_resp_len + 1
+  memcpy(api_resp(api_resp_len), name(0), name_len)
+  api_resp_len = api_resp_len + name_len
+  api_resp(api_resp_len:2) = "\x22:"
+  api_resp_len = api_resp_len + 2
+end
+
+# Procedure for adding start of an array.
+procedure api_add_json_array_start()
+  api_resp(api_resp_len:1) = "["
+  api_resp_len = api_resp_len + 1
+end
+
+# Procedure for adding end of an array.
+procedure api_add_json_array_end()
+  api_resp(api_resp_len:1) = "]"
+  api_resp_len = api_resp_len + 1
+end
+
+# Procedure for adding start of an object.
+procedure api_add_json_object_start()
+  api_resp(api_resp_len:1) = "{"
+  api_resp_len = api_resp_len + 1
+end
+
+# Procedure for adding end of an object.
+procedure api_add_json_object_end()
+  api_resp(api_resp_len:1) = "}"
+  api_resp_len = api_resp_len + 1
+end
+
+# Procedure for adding CR+LF to the response buffer.
+procedure api_add_crlf()
+  api_resp(api_resp_len:2) = $0A0D
+  api_resp_len = api_resp_len + 2
+end
+
+# Procedure for adding a comma to the response buffer.
+procedure api_add_comma()
+  api_resp(api_resp_len:1) = ","
+  api_resp_len = api_resp_len + 1
+end
+
+# Procedure for adding HTTP response headers to the response buffer.
+procedure api_add_http_headers()
+  # HTTP 200
+  api_resp(api_resp_len:15) = "HTTP/1.0 200 OK"
+  api_resp_len = api_resp_len + 15
+
+  # Add CR+LF.
+  call api_add_crlf()
+
+  # Content-Type
+  api_resp(api_resp_len:30) = "Content-Type: application/json"
+  api_resp_len = api_resp_len + 30
+
+  # Add CR+LF.
+  call api_add_crlf()
+
+  # Add Cache-Control field to prevent caching.
+  api_resp(api_resp_len:33) = "Cache-Control: private, max-age=0"
+  api_resp_len = api_resp_len + 33
+
+  # Add CR+LF.
+  call api_add_crlf()
+
+  # Add CR+LF.
+  call api_add_crlf()
+end
+
+# Procedure for converting the given 4-bit value to a hex character
+# and adding it to the response buffer.
+procedure api_add_nibble(nibble)
+  if nibble < $a then
+      api_resp(api_resp_len:1) = nibble + $30
+  else
+      api_resp(api_resp_len:1) = nibble + $37
+  end if
+  api_resp_len = api_resp_len + 1
+end
+
+# Procedure for converting the given buffer to a hex string
+# and adding it to the response buffer.
+procedure api_add_hex_string(buffer_len, buffer())
+  api_resp_iter = 0
+  while api_resp_iter < buffer_len
+    call api_add_nibble(buffer(api_resp_iter:1) / 16)
+    call api_add_nibble(buffer(api_resp_iter:1) & $F)
+    api_resp_iter = api_resp_iter + 1
+  end while
+end
+
+# Procedure for converting the given buffer to a hex string
+# and adding it to the response buffer.
+procedure api_add_quoted_hex_string(buffer_len, buffer())
+  api_resp(api_resp_len:1) = "\x22"
+  api_resp_len = api_resp_len + 1
+
+  api_resp_iter = 0
+  while api_resp_iter < buffer_len
+    call api_add_nibble(buffer(api_resp_iter:1) / 16)
+    call api_add_nibble(buffer(api_resp_iter:1) & $F)
+    api_resp_iter = api_resp_iter + 1
+  end while
+
+  api_resp(api_resp_len:1) = "\x22"
+  api_resp_len = api_resp_len + 1
+end
+
+# Procedure for retrieving a setting item value from store
+# and adding it to the response buffer.
+procedure api_add_settings_item(item, type, name_len, name())
+  # Setting item name
+  call api_add_json_object_name(name_len, name(0:name_len))
+
+  # Setting item value
+  call flash_ps_load(item)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if type = API_STORE_TYPE_INTEGER
+    if cmd_result = 0
+      api_local_temp = cmd_value(0:4)
+    else
+      api_local_temp = 0
+    end if
+    call api_add_json_integer(api_local_temp)
+  end if
+  if type = API_STORE_TYPE_STRING
+    if cmd_result = 0
+      call api_add_json_quoted_value(cmd_value_len, cmd_value(0:cmd_value_len))
+    else
+      call api_add_json_quoted_value(0, "")
+    end if
+  end if
+end
+
+# Procedure for handling an unknown API request
+procedure api_handle_unknown_request(request)
+  # Generate a response
+  api_resp_len = 0
+
+  # HTTP 404
+  api_resp(api_resp_len:24) = "HTTP/1.0 400 Bad Request"
+  api_resp_len = api_resp_len + 24
+
+  # Add CR+LF.
+  call api_add_crlf()
+
+  # Add CR+LF.
+  call api_add_crlf()
+
+  # Send the response
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  call https_api_response_finish(request)
+end
+
+# Procedure for handling API reboot request
+procedure api_handle_reboot_request(request)
+  # Mark the request as handled
+  api_req_handled = 1
+
+  # Generate a response
+  api_resp_len = 0
+  call api_add_http_headers()
+
+  # Send the response
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  call https_api_response_finish(request)
+
+  # Reboot the module
+  call system_reset(0)
+end
+
+
+
+###############################################################################
+# API SMPPT DC-DC - start
+###############################################################################
+
+# Procedure for handling API SMPPT status request
+procedure api_handle_smppt_status_request(request)
+  # Mark the request as handled
+  api_req_handled = 1
+
+  # Generate a response
+  api_resp_len = 0
+
+  # HTTP headers
+  call api_add_http_headers()
+  # JSON status object start
+  call api_add_json_object_start()
+  # MAC name
+  call api_add_json_object_name(API_PARAM_JSON_MAC_LEN, API_PARAM_JSON_MAC(:))
+  # MAC value
+  call api_add_json_quoted_value(mac_address_len, mac_address(0:mac_address_len))
+  # Mode name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_SMODE_LEN, API_PARAM_JSON_SMODE(:))
+  # Mode value
+  call api_add_json_integer(smppt_mode)
+  # Temp1 name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_TEMP1_LEN, API_PARAM_JSON_TEMP1(:))
+  # Temp1 value
+  call api_add_json_integer(smppt_temp1)
+  # Temp2 name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_TEMP2_LEN, API_PARAM_JSON_TEMP2(:))
+  # Temp2 value
+  call api_add_json_integer(smppt_temp2)
+  # Meas name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_MEAS_LEN, API_PARAM_JSON_MEAS(:))
+  # JSON Meas value object start
+  call api_add_json_object_start()
+  # Vin name
+  call api_add_json_object_name(API_PARAM_JSON_VIN_LEN, API_PARAM_JSON_VIN(:))
+  # Vin value
+  # call api_add_json_value(smppt_meas_len, smppt_meas_vin(0:smppt_meas_len))
+  call api_add_json_integer(smppt_meas_vin)
+  # Vout name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_VOUT_LEN, API_PARAM_JSON_VOUT(:))
+  # Vout value
+  # call api_add_json_value(smppt_meas_len, smppt_meas_vout(0:smppt_meas_len))
+  call api_add_json_integer(smppt_meas_vout)
+  # Iin name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_IIN_LEN, API_PARAM_JSON_IIN(:))
+  # Iin value
+  # call api_add_json_value(smppt_meas_len, smppt_meas_iin(0:smppt_meas_len))
+  call api_add_json_integer(smppt_meas_iin)
+  # Iout name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_IOUT_LEN, API_PARAM_JSON_IOUT(:))
+  # Iout value
+  # call api_add_json_value(smppt_meas_len, smppt_meas_iout(0:smppt_meas_len))
+  call api_add_json_integer(smppt_meas_iout)
+  # JSON Meas value object end
+  call api_add_json_object_end()
+  # JSON status object end
+  call api_add_json_object_end()
+  
+  #ATTENZIONE quando si aggiungono dati a non superare la dimensione del buffer di risposta
+  #compreso HTTP HEADER (86 chars). Se supera spezzare come fatto in api_handle_smppt_settings_request
+
+  # Send the response
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  call https_api_response_finish(request)
+end
+
+# Procedure for handling API SMPPT settings request
+procedure api_handle_smppt_settings_request(request)
+  # Mark the request as handled
+  api_req_handled = 1
+
+  # Generate a response
+  api_resp_len = 0
+
+  # HTTP headers
+  call api_add_http_headers()
+  # JSON settings object start
+  call api_add_json_object_start()
+  # mppt name
+  call api_add_json_object_name(API_SMPPT_MPPT_RESOURCE_LEN, API_SMPPT_MPPT_RESOURCE(:))
+  # mppt value
+  call api_add_json_integer(smppt_setting_mppt)
+  # mppt algorithm name
+  call api_add_comma()
+  call api_add_json_object_name(API_SMPPT_ALGO_RESOURCE_LEN, API_SMPPT_ALGO_RESOURCE(:))
+  # mppt algorithm value
+  call api_add_json_integer(smppt_setting_algo)
+  # force name
+  call api_add_comma()
+  call api_add_json_object_name(API_SMPPT_FORCE_RESOURCE_LEN, API_SMPPT_FORCE_RESOURCE(:))
+  # force value
+  call api_add_json_integer(smppt_setting_force)
+  # freq name
+  call api_add_comma()
+  call api_add_json_object_name(API_SMPPT_FREQ_RESOURCE_LEN, API_SMPPT_FREQ_RESOURCE(:))
+  # freq value
+  call api_add_json_integer(smppt_setting_freq)
+  # dt name
+  call api_add_comma()
+  call api_add_json_object_name(API_SMPPT_DT_RESOURCE_LEN, API_SMPPT_DT_RESOURCE(:))
+  # dt value
+  call api_add_json_integer(smppt_setting_dt)
+  # m1 name
+  call api_add_comma()
+  call api_add_json_object_name(API_SMPPT_M1_RESOURCE_LEN, API_SMPPT_M1_RESOURCE(:))
+  # m1 value
+  call api_add_json_integer(smppt_setting_m1)
+  # m3 name
+  call api_add_comma()
+  call api_add_json_object_name(API_SMPPT_M3_RESOURCE_LEN, API_SMPPT_M3_RESOURCE(:))
+  # m3 value
+  call api_add_json_integer(smppt_setting_m3)
+  # JSON settings object end
+  call api_add_json_object_end()
+  
+  #ATTENZIONE quando si aggiungono dati a non superare la dimensione del buffer di risposta
+  #compreso HTTP HEADER (86 chars). Se supera spezzare come fatto in api_handle_smppt_settings_request
+
+  # Send rest of the response
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  call https_api_response_finish(request)
+end
+
+# Procedure for parsing API SMPPT settings item request
+procedure api_parse_smppt_settings_item_request(request, resource_len, resource_data())
+  api_store_request_type = API_STORE_TYPE_NONE
+  api_store_request = request
+  api_store_request_data_len = 0
+
+  if resource_len = API_SMPPT_MPPT_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_MPPT_RESOURCE(0), API_SMPPT_MPPT_RESOURCE_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_SMPPT_PARAM
+	memcpy(api_store_request_smppt_key(0), resource_data(0), resource_len)
+    api_store_request_smppt_key_len = resource_len
+  end if
+  if resource_len = API_SMPPT_ALGO_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_ALGO_RESOURCE(0), API_SMPPT_ALGO_RESOURCE_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_SMPPT_PARAM
+	memcpy(api_store_request_smppt_key(0), resource_data(0), resource_len)
+    api_store_request_smppt_key_len = resource_len
+  end if
+  if resource_len = API_SMPPT_FORCE_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_FORCE_RESOURCE(0), API_SMPPT_FORCE_RESOURCE_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_SMPPT_PARAM
+	memcpy(api_store_request_smppt_key(0), resource_data(0), resource_len)
+    api_store_request_smppt_key_len = resource_len
+  end if
+  if resource_len = API_SMPPT_FREQ_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_FREQ_RESOURCE(0), API_SMPPT_FREQ_RESOURCE_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_SMPPT_PARAM
+    memcpy(api_store_request_smppt_key(0), resource_data(0), resource_len)
+    api_store_request_smppt_key_len = resource_len
+  end if
+  if resource_len = API_SMPPT_DT_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_DT_RESOURCE(0), API_SMPPT_DT_RESOURCE_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_SMPPT_PARAM
+    memcpy(api_store_request_smppt_key(0), resource_data(0), resource_len)
+    api_store_request_smppt_key_len = resource_len
+  end if
+  if resource_len = API_SMPPT_M1_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_M1_RESOURCE(0), API_SMPPT_M1_RESOURCE_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_SMPPT_PARAM
+    memcpy(api_store_request_smppt_key(0), resource_data(0), resource_len)
+    api_store_request_smppt_key_len = resource_len
+  end if
+  if resource_len = API_SMPPT_M3_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_M3_RESOURCE(0), API_SMPPT_M3_RESOURCE_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_SMPPT_PARAM
+    memcpy(api_store_request_smppt_key(0), resource_data(0), resource_len)
+    api_store_request_smppt_key_len = resource_len
+  end if
+end
+
+###############################################################################
+# API SMPPT DC-DC - end
+###############################################################################
+
+
+
+# Procedure for handling API status request
+procedure api_handle_status_request(request)
+  # Mark the request as handled
+  api_req_handled = 1
+
+  # Generate a response
+  api_resp_len = 0
+
+  # HTTP headers
+  call api_add_http_headers()
+  # JSON status object start
+  call api_add_json_object_start()
+  # Mode name
+  call api_add_json_object_name(API_PARAM_JSON_MODE_LEN, API_PARAM_JSON_MODE(:))
+  # Mode value
+  call api_add_json_integer(operating_mode)
+  # Settings name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_SETTINGS_LEN, API_PARAM_JSON_SETTINGS(:))
+  # JSON settings value object start
+  call api_add_json_object_start()
+  # SSID name
+  call api_add_json_object_name(API_PARAM_JSON_SSID_LEN, API_PARAM_JSON_SSID(:))
+  # SSID value
+  call api_add_json_quoted_value(ssid_len, ssid(0:ssid_len))
+  # BSSID name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_BSSID_LEN, API_PARAM_JSON_BSSID(:))
+  # BSSID value
+  call api_add_quoted_hex_string(6, bssid(:))
+  # Channel name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_CHANNEL_LEN, API_PARAM_JSON_CHANNEL(:))
+  # Channel value
+  call api_add_json_integer(ap_channel)
+  # Security name
+  call api_add_comma()
+  call api_add_json_object_name(API_PARAM_JSON_SECURITY_LEN, API_PARAM_JSON_SECURITY(:))
+  # Security value
+  call api_add_json_integer(ap_security)
+  # JSON settings value object end
+  call api_add_json_object_end()
+  # JSON status object end
+  call api_add_json_object_end()
+
+  # Send the response
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  call https_api_response_finish(request)
+end
+
+# Procedure for handling API networks request
+procedure api_handle_networks_request(request)
+  # Mark the request as handled
+  api_req_handled = 1
+
+  # Store request for later use
+  api_networks_request = request
+
+  # Generate a response
+  api_resp_len = 0
+  api_resp_iter = 0
+
+  # HTTP headers
+  call api_add_http_headers()
+  # JSON networks object start
+  call api_add_json_object_start()
+  # Networks name
+  call api_add_json_object_name(API_PARAM_JSON_NETWORKS_LEN, API_PARAM_JSON_NETWORKS(:))
+  # JSON networks value array start
+  call api_add_json_array_start()
+
+  # Send the response
+  call https_api_response(api_networks_request, api_resp_len, api_resp(0:api_resp_len))
+
+  # Initiate scan results sort.
+  call sme_scan_results_sort_rssi(20)
+end
+
+# Procedure for handling API AP settings request
+procedure api_handle_ap_settings_request(request)
+  # Mark the request as handled
+  api_req_handled = 1
+
+  # Generate a response
+  api_resp_len = 0
+
+  # HTTP headers
+  call api_add_http_headers()
+  # JSON settings object start
+  call api_add_json_object_start()
+  # Settings name
+  call api_add_json_object_name(API_PARAM_JSON_SETTINGS_LEN, API_PARAM_JSON_SETTINGS(:))
+  # JSON settings value object start
+  call api_add_json_object_start()
+  # SSID
+  call api_add_settings_item(FLASH_PS_KEY_AP_SSID, API_STORE_TYPE_STRING, API_PARAM_JSON_SSID_LEN, API_PARAM_JSON_SSID(:))
+  # Channel
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_AP_CHANNEL, API_STORE_TYPE_INTEGER, API_PARAM_JSON_CHANNEL_LEN, API_PARAM_JSON_CHANNEL(:))
+
+  # Send first part of the response. Response is sent in multiple parts
+  # because the full response will not fit api_resp buffer.
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  api_resp_len = 0
+
+  # Security
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_AP_SECURITY, API_STORE_TYPE_INTEGER, API_PARAM_JSON_SECURITY_LEN, API_PARAM_JSON_SECURITY(:))
+  # Password
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_AP_PW, API_STORE_TYPE_STRING, API_PARAM_JSON_PASSWORD_LEN, API_PARAM_JSON_PASSWORD(:))
+  # IP address
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_AP_IPV4_ADDR, API_STORE_TYPE_INTEGER, API_PARAM_JSON_IP_ADDRESS_LEN, API_PARAM_JSON_IP_ADDRESS(:))
+  # IP netmask
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_AP_IPV4_NETMASK, API_STORE_TYPE_INTEGER, API_PARAM_JSON_IP_NETMASK_LEN, API_PARAM_JSON_IP_NETMASK(:))
+
+  # Send second part of the response.
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  api_resp_len = 0
+
+  # DHCP enabled
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_DHCPS_ENABLE, API_STORE_TYPE_INTEGER, API_PARAM_JSON_DHCP_ENABLED_LEN, API_PARAM_JSON_DHCP_ENABLED(:))
+  # DHCP range
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_DHCPS_SPACE, API_STORE_TYPE_INTEGER, API_PARAM_JSON_DHCP_RANGE_LEN, API_PARAM_JSON_DHCP_RANGE(:))
+  # DNS enabled
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_DNSS_ENABLE, API_STORE_TYPE_INTEGER, API_PARAM_JSON_DNS_ENABLED_LEN, API_PARAM_JSON_DNS_ENABLED(:))
+  # DNS AnyUrl
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_DNSS_ANY_URL, API_STORE_TYPE_INTEGER, API_PARAM_JSON_DNS_ANYURL_LEN, API_PARAM_JSON_DNS_ANYURL(:))
+  # DNS url name
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_DNSS_URL, API_STORE_TYPE_STRING, API_PARAM_JSON_DNS_URL_LEN, API_PARAM_JSON_DNS_URL(:))
+  # JSON settings value object end
+  call api_add_json_object_end()
+  # JSON settings object end
+  call api_add_json_object_end()
+
+  # Send rest of the response
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  call https_api_response_finish(request)
+end
+
+# Procedure for handling API STA settings request
+procedure api_handle_sta_settings_request(request)
+  # Mark the request as handled
+  api_req_handled = 1
+
+  # Generate a response
+  api_resp_len = 0
+
+  # HTTP headers
+  call api_add_http_headers()
+  # JSON settings object start
+  call api_add_json_object_start()
+  # Settings name
+  call api_add_json_object_name(API_PARAM_JSON_SETTINGS_LEN, API_PARAM_JSON_SETTINGS(:))
+  # JSON settings value object start
+  call api_add_json_object_start()
+  # SSID
+  call api_add_settings_item(FLASH_PS_KEY_CLIENT_SSID, API_STORE_TYPE_STRING, API_PARAM_JSON_SSID_LEN, API_PARAM_JSON_SSID(:))
+  # Password name
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_CLIENT_PW, API_STORE_TYPE_STRING, API_PARAM_JSON_PASSWORD_LEN, API_PARAM_JSON_PASSWORD(:))
+
+  # Send first part of the response. Response is sent in multiple parts
+  # because the full response will not fit api_resp buffer.
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  api_resp_len = 0
+
+  # DHCP enabled
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_STA_DHCP_ENABLED, API_STORE_TYPE_INTEGER, API_PARAM_JSON_DHCP_ENABLED_LEN, API_PARAM_JSON_DHCP_ENABLED(:))
+  # IP address
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_STA_IPV4_ADDR, API_STORE_TYPE_INTEGER, API_PARAM_JSON_IP_ADDRESS_LEN, API_PARAM_JSON_IP_ADDRESS(:))
+  # IP netmask
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_STA_IPV4_NETMASK, API_STORE_TYPE_INTEGER, API_PARAM_JSON_IP_NETMASK_LEN, API_PARAM_JSON_IP_NETMASK(:))
+  # IP gateway
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_STA_IPV4_GW, API_STORE_TYPE_INTEGER, API_PARAM_JSON_IP_GATEWAY_LEN, API_PARAM_JSON_IP_GATEWAY(:))
+  # DNS 1 address
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_STA_IPV4_DNS1, API_STORE_TYPE_INTEGER, API_PARAM_JSON_DNS_1_ADDRESS_LEN, API_PARAM_JSON_DNS_1_ADDRESS(:))
+  # DNS 2 address
+  call api_add_comma()
+  call api_add_settings_item(FLASH_PS_KEY_STA_IPV4_DNS2, API_STORE_TYPE_INTEGER, API_PARAM_JSON_DNS_2_ADDRESS_LEN, API_PARAM_JSON_DNS_2_ADDRESS(:))
+  # JSON settings value object end  
+  call api_add_json_object_end()
+  # JSON settings object end
+  call api_add_json_object_end()
+
+  # Send rest of the response
+  call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+  call https_api_response_finish(request)
+end
+
+# Procedure for parsing API STA settings item request
+procedure api_parse_sta_settings_item_request(request, resource_len, resource_data())
+  api_store_request_type = API_STORE_TYPE_NONE
+  api_store_request = request
+  api_store_request_data_len = 0
+
+  if resource_len = API_PARAM_SSID_LEN && memcmp(resource_data(0), API_PARAM_SSID(0), API_PARAM_SSID_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_STRING
+    api_store_request_key = FLASH_PS_KEY_CLIENT_SSID
+  end if
+  if resource_len = API_PARAM_PASSWORD_LEN && memcmp(resource_data(0), API_PARAM_PASSWORD(0), API_PARAM_PASSWORD_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_STRING
+    api_store_request_key = FLASH_PS_KEY_CLIENT_PW
+  end if
+  if resource_len = API_PARAM_DHCP_ENABLED_LEN && memcmp(resource_data(0), API_PARAM_DHCP_ENABLED(0), API_PARAM_DHCP_ENABLED_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_STA_DHCP_ENABLED
+  end if
+  if resource_len = API_PARAM_IP_ADDRESS_LEN && memcmp(resource_data(0), API_PARAM_IP_ADDRESS(0), API_PARAM_IP_ADDRESS_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_STA_IPV4_ADDR
+  end if
+  if resource_len = API_PARAM_IP_NETMASK_LEN && memcmp(resource_data(0), API_PARAM_IP_NETMASK(0), API_PARAM_IP_NETMASK_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_STA_IPV4_NETMASK
+  end if
+  if resource_len = API_PARAM_IP_GATEWAY_LEN && memcmp(resource_data(0), API_PARAM_IP_GATEWAY(0), API_PARAM_IP_GATEWAY_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_STA_IPV4_GW
+  end if
+  if resource_len = API_PARAM_DNS_1_ADDRESS_LEN && memcmp(resource_data(0), API_PARAM_DNS_1_ADDRESS(0), API_PARAM_DNS_1_ADDRESS_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_STA_IPV4_DNS1
+  end if
+  if resource_len = API_PARAM_DNS_2_ADDRESS_LEN && memcmp(resource_data(0), API_PARAM_DNS_2_ADDRESS(0), API_PARAM_DNS_2_ADDRESS_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_STA_IPV4_DNS2
+  end if
+end
+
+# Procedure for handling API mode request
+procedure api_handle_mode_request(request)
+  # Mark the request as handled
+  api_req_handled = 1
+
+  api_store_request = request
+  api_store_request_data_len = 0
+  api_store_request_type = API_STORE_TYPE_INTEGER
+  api_store_request_key = FLASH_PS_KEY_MODULE_SERVICE
+end
+
+# Procedure for parsing API AP settings item request
+procedure api_parse_ap_settings_item_request(request, resource_len, resource_data())
+  api_store_request_type = API_STORE_TYPE_NONE
+  api_store_request = request
+  api_store_request_data_len = 0
+
+  if resource_len = API_PARAM_SSID_LEN && memcmp(resource_data(0), API_PARAM_SSID(0), API_PARAM_SSID_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_STRING
+    api_store_request_key = FLASH_PS_KEY_AP_SSID
+  end if
+  if resource_len = API_PARAM_PASSWORD_LEN && memcmp(resource_data(0), API_PARAM_PASSWORD(0), API_PARAM_PASSWORD_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_STRING
+    api_store_request_key = FLASH_PS_KEY_AP_PW
+  end if
+  if resource_len = API_PARAM_DHCP_RANGE_LEN && memcmp(resource_data(0), API_PARAM_DHCP_RANGE(0), API_PARAM_DHCP_RANGE_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_DHCPS_SPACE
+  end if
+  if resource_len = API_PARAM_DNS_URL_LEN && memcmp(resource_data(0), API_PARAM_DNS_URL(0), API_PARAM_DNS_URL_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_STRING
+    api_store_request_key = FLASH_PS_KEY_DNSS_URL
+  end if
+  if resource_len = API_PARAM_CHANNEL_LEN && memcmp(resource_data(0), API_PARAM_CHANNEL(0), API_PARAM_CHANNEL_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_AP_CHANNEL
+  end if
+  if resource_len = API_PARAM_SECURITY_LEN && memcmp(resource_data(0), API_PARAM_SECURITY(0), API_PARAM_SECURITY_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_AP_SECURITY
+  end if
+  if resource_len = API_PARAM_IP_ADDRESS_LEN && memcmp(resource_data(0), API_PARAM_IP_ADDRESS(0), API_PARAM_IP_ADDRESS_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_AP_IPV4_ADDR
+  end if
+  if resource_len = API_PARAM_IP_NETMASK_LEN && memcmp(resource_data(0), API_PARAM_IP_NETMASK(0), API_PARAM_IP_NETMASK_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_AP_IPV4_NETMASK
+  end if
+  if resource_len = API_PARAM_DHCP_ENABLED_LEN && memcmp(resource_data(0), API_PARAM_DHCP_ENABLED(0), API_PARAM_DHCP_ENABLED_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_DHCPS_ENABLE
+  end if
+  if resource_len = API_PARAM_DNS_ENABLED_LEN && memcmp(resource_data(0), API_PARAM_DNS_ENABLED(0), API_PARAM_DNS_ENABLED_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_DNSS_ENABLE
+  end if
+  if resource_len = API_PARAM_DNS_ANYURL_LEN && memcmp(resource_data(0), API_PARAM_DNS_ANYURL(0), API_PARAM_DNS_ANYURL_LEN)
+    api_req_handled = 1
+    api_store_request_type = API_STORE_TYPE_INTEGER
+    api_store_request_key = FLASH_PS_KEY_DNSS_ANY_URL
+  end if
+end
+
+# Procedure for storing data to PS store.
+procedure api_write_store_data()
+  if api_store_request_type = API_STORE_TYPE_INTEGER
+    # Assume pending data is an integer.
+    call util_atoi(api_store_request_data_len, api_store_request_data(0:api_store_request_data_len))(api_local_temp)
+    # Write it to the store.
+    call flash_ps_save(api_store_request_key, 4, api_local_temp)
+  end if
+  if api_store_request_type = API_STORE_TYPE_STRING
+    # Assume pending data is a string, write it to the store.
+    call flash_ps_save(api_store_request_key, api_store_request_data_len, api_store_request_data(0:api_store_request_data_len))
+  end if
+  ##### SMPPT API #####
+  if api_store_request_type = API_STORE_TYPE_SMPPT_PARAM
+    # send data to uart nel formato "#item=value"
+	# call wifi_to_mcu_transfer_init_notification()
+	call endpoint_send(MCU_ENDPOINT, char_len, char_hash(0:char_len))
+	call endpoint_send(MCU_ENDPOINT, api_store_request_smppt_key_len, api_store_request_smppt_key(0:api_store_request_smppt_key_len))
+	call endpoint_send(MCU_ENDPOINT, char_len, char_equal(0:char_len))
+	call endpoint_send(MCU_ENDPOINT, api_store_request_data_len, api_store_request_data(0:api_store_request_data_len))
+	call endpoint_send(MCU_ENDPOINT, crlf_len, crlf(0:crlf_len))
+	# call wifi_to_mcu_transfer_completed_notification()
+  end if
+  #####################
+end
+
+# Event received when REST API request is called.
+event https_api_request(request, method, resource_len, resource_data)
+  api_req_handled = 0
+  ##### SMPPT API #####
+  if resource_len = API_SMPPT_STATUS_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_STATUS_RESOURCE(0), API_SMPPT_STATUS_RESOURCE_LEN)
+    call api_handle_smppt_status_request(request)
+  end if
+  if resource_len = API_SMPPT_SETTINGS_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_SETTINGS_RESOURCE(0), API_SMPPT_SETTINGS_RESOURCE_LEN)
+    call api_handle_smppt_settings_request(request)
+  end if
+  if resource_len > API_SMPPT_SETTINGS_ITEM_RESOURCE_LEN && memcmp(resource_data(0), API_SMPPT_SETTINGS_ITEM_RESOURCE(0), API_SMPPT_SETTINGS_ITEM_RESOURCE_LEN)
+    call api_parse_smppt_settings_item_request(request, resource_len - API_SMPPT_SETTINGS_ITEM_RESOURCE_LEN, resource_data(API_SMPPT_SETTINGS_ITEM_RESOURCE_LEN:resource_len - API_SMPPT_SETTINGS_ITEM_RESOURCE_LEN))
+  end if
+  #####################
+  if resource_len = API_REBOOT_RESOURCE_LEN && memcmp(resource_data(0), API_REBOOT_RESOURCE(0), API_REBOOT_RESOURCE_LEN)
+    call api_handle_reboot_request(request)
+  end if
+  if resource_len = API_STATUS_RESOURCE_LEN && memcmp(resource_data(0), API_STATUS_RESOURCE(0), API_STATUS_RESOURCE_LEN)
+    call api_handle_status_request(request)
+  end if
+  if resource_len = API_NETWORKS_RESOURCE_LEN && memcmp(resource_data(0), API_NETWORKS_RESOURCE(0), API_NETWORKS_RESOURCE_LEN)
+    call api_handle_networks_request(request)
+  end if
+  if resource_len = API_AP_SETTINGS_RESOURCE_LEN && memcmp(resource_data(0), API_AP_SETTINGS_RESOURCE(0), API_AP_SETTINGS_RESOURCE_LEN)
+    call api_handle_ap_settings_request(request)
+  end if
+  if resource_len = API_STA_SETTINGS_RESOURCE_LEN && memcmp(resource_data(0), API_STA_SETTINGS_RESOURCE(0), API_STA_SETTINGS_RESOURCE_LEN)
+    call api_handle_sta_settings_request(request)
+  end if
+  if resource_len > API_AP_SETTINGS_ITEM_RESOURCE_LEN && memcmp(resource_data(0), API_AP_SETTINGS_ITEM_RESOURCE(0), API_AP_SETTINGS_ITEM_RESOURCE_LEN)
+    call api_parse_ap_settings_item_request(request, resource_len - API_AP_SETTINGS_ITEM_RESOURCE_LEN, resource_data(API_AP_SETTINGS_ITEM_RESOURCE_LEN:resource_len - API_AP_SETTINGS_ITEM_RESOURCE_LEN))
+  end if
+  if resource_len > API_STA_SETTINGS_ITEM_RESOURCE_LEN && memcmp(resource_data(0), API_STA_SETTINGS_ITEM_RESOURCE(0), API_STA_SETTINGS_ITEM_RESOURCE_LEN)
+    call api_parse_sta_settings_item_request(request, resource_len - API_STA_SETTINGS_ITEM_RESOURCE_LEN, resource_data(API_STA_SETTINGS_ITEM_RESOURCE_LEN:resource_len - API_STA_SETTINGS_ITEM_RESOURCE_LEN))
+  end if
+  if resource_len = API_MODE_RESOURCE_LEN && memcmp(resource_data(0), API_MODE_RESOURCE(0), API_MODE_RESOURCE_LEN)
+    call api_handle_mode_request(request)
+  end if
+  if api_req_handled = 0
+    call api_handle_unknown_request(request)
+  end if
+end
+
+# Event received when REST API request data is received.
+event https_api_request_data(request, data_len, data)
+  if request = api_store_request
+    memcpy(api_store_request_data(api_store_request_data_len), data(0), data_len)
+    api_store_request_data_len = api_store_request_data_len + data_len
+  end if
+end
+
+# Event received when REST API request is finished.
+event https_api_request_finished(request)
+  if request = api_store_request
+    # Write pending PS store data
+    call api_write_store_data()
+
+    # Generate a response
+    api_resp_len = 0
+    call api_add_http_headers()
+
+    # Send the response
+    call https_api_response(request, api_resp_len, api_resp(0:api_resp_len))
+    call https_api_response_finish(request)
+    api_store_request_type = API_STORE_TYPE_NONE
+    api_store_request = 0
+    api_store_request_data_len = 0    
+  end if
+end
+
+# Event received during a scan results sort for each AP.
+event sme_scan_sort_result(local_bssid, local_channel, local_rssi, local_snr, local_secure, local_ssid_len, local_ssid)
+  # Process the request if we a pending API networks request.
+  if api_networks_request != 0
+    # Generate a response
+    api_resp_len = 0
+
+    # SSID
+    if api_resp_iter != 0
+      call api_add_comma()
+    end if
+    call api_add_json_quoted_value(local_ssid_len, local_ssid(0:local_ssid_len))
+    api_resp_iter = api_resp_iter + 1
+
+    # Send the response
+    call https_api_response(api_networks_request, api_resp_len, api_resp(0:api_resp_len))
+  end if
+end
+
+# Event received when a scan results sort has been completed.
+event sme_scan_sort_finished()
+  # Complete the pending API networks request since all the results have been sent.
+  if api_networks_request != 0
+    # Generate a response
+    api_resp_len = 0
+
+    # JSON networks value array end
+    call api_add_json_array_end()
+    # JSON networks object end
+    call api_add_json_object_end()
+
+    # Send the response
+    call https_api_response(api_networks_request, api_resp_len, api_resp(0:api_resp_len))
+    call https_api_response_finish(api_networks_request)
+    api_networks_request = 0
+  end if
+end

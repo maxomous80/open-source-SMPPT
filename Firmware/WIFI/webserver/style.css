@@ -1,0 +1,76 @@
+@charset "utf-8";
+
+nav.cls-nav-top {
+  background-color: #888888;
+  border: 1px solid #888888;
+  border-radius: 4px;
+  margin: 8px 22px 8px 22px;
+  overflow: hidden;
+  width: 90%;
+}
+
+ul.cls-menu-top {
+  list-style: none;
+  margin: 8px 0px 8px 0px;
+}
+
+li.cls-menu-top-logo {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0;
+}
+
+li.cls-menu-top-item {
+  display: inline-block;
+  margin: 0;
+}
+
+li.cls-menu-top-item a {
+  display: block;
+  padding: 0px 24px;
+  font-family: Arial, Georgia, "Times New Roman", Times, serif;
+  text-decoration: none;
+  color: #ffffff;
+  text-align: center;
+}
+
+input.cls-input-status,
+input.cls-input-setting {
+  border: none;
+  padding: 0;
+  margin: 0;
+
+  font: inherit;
+  color: inherit;
+  line-height: inherit;
+  font-size: inherit;
+  text-align: inherit;
+}
+
+input.cls-input-setting:hover,
+input.cls-input-setting:focus {
+  background-color: #FFD;
+}
+
+label.cls-label-setting {
+  display: inline-block;
+  width: 180px;
+}
+
+span.cls-span-status {
+  display: inline-block;
+  width: 120px;
+  margin-left: 22px;
+}
+
+form.cls-form-setting {
+  margin-left: 22px;
+}
+
+h1.cls-heading {
+  margin-left: 22px;
+}
+
+button.cls-input-action-button {
+  margin-top: 20px;
+}

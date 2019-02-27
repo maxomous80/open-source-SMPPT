@@ -1,0 +1,243 @@
+# main.bgs - main script file for HTTP server example
+
+
+import "utils.bgs"
+import "debug.bgs"
+import "io.bgs"
+import "smppt.bgs"
+
+# Constants
+const HANDLE_WIFI = 0                              # A handle indicating Wi-Fi interface
+export const TIMER_RECONNECTION = 0                # A handle used for reconnection timer
+const TIMER_STATUS_PIN = 1                         # A handle used for controlling status notification pin
+const MODE_STA = 1                                 # STA mode value
+const MODE_AP = 2                                  # AP mode value
+
+#######test-debug
+# const TIMER_RANDOM = 10
+# import "rand.bgs"
+#######test-debug
+
+export const STATUS_INTERVAL_CONNECTING = 1000     # The interval in milliseconds for connecting state
+export const STATUS_INTERVAL_CONNECTED = 0         # The interval in milliseconds for connected state
+export const STATUS_INTERVAL_ERROR = 200           # The interval in milliseconds for error state
+
+export const FLASH_PS_KEY_STA_DHCP_ENABLED = $8000 # PS label for STA DHCP enabled
+export const FLASH_PS_KEY_STA_IPV4_ADDR = $8001    # PS label for STA IP address
+export const FLASH_PS_KEY_STA_IPV4_NETMASK = $8002 # PS label for STA netmask
+export const FLASH_PS_KEY_STA_IPV4_GW = $8003      # PS label for STA gateway
+export const FLASH_PS_KEY_STA_IPV4_DNS1 = $8004    # PS label for DNS #1
+export const FLASH_PS_KEY_STA_IPV4_DNS2 = $8005    # PS label for DNS #2
+export const FLASH_PS_KEY_AP_IPV4_ADDR = $8006     # PS label for AP IP address
+export const FLASH_PS_KEY_AP_IPV4_NETMASK = $8007  # PS label for AP netmask
+export const PATH_DEVICE_FLASH = 0                 # Path device for internal flash
+export const PATH_DEVICE_API = 1                   # Path device for BGAPI
+export const PATH_DEVICE_SDCARD = 2                # Path device for SD card
+
+# Variables
+export dim operating_mode       # Current Wi-Fi operating mode
+export dim ssid(32)             # AP/STA SSID
+export dim ssid_len             # AP/STA SSID length
+export dim passphrase(63)       # AP/STA passphrase
+export dim passphrase_len       # AP/STA passphrase length
+export dim bssid(6)             # AP/STA BSSID
+export dim cmd_result           # PS load command result code
+export dim cmd_value_len        # PS load command value length
+export dim cmd_value(64)        # PS load command value data
+dim status_pin_index            # Port index of status notification pin
+dim status_pin                  # Status notification pin
+dim status_pin_state            # Status notification pin state
+dim status_pin_interval         # Status notification pin interval
+
+export dim mac_address(15)
+export dim mac_address_len
+
+# Internal procedure called by status notification service. Switches between
+# pin states and reschedules the interrupt service.
+procedure status_notification_next()
+  # Set pin output.
+  status_pin_state = status_pin_state ^ 1
+  if status_pin_state = 0
+    call hardware_write_gpio(status_pin_index, status_pin, status_pin)
+  else
+    call hardware_write_gpio(status_pin_index, status_pin, $0000)
+  end if
+
+  # Reschedule the interrupt service if an interval has been set.
+  if status_pin_interval > 0
+    call hardware_set_soft_timer(status_pin_interval, TIMER_STATUS_PIN, 1)
+  end if
+end
+
+# Procedure for starting status notification service.
+export procedure start_status_notification(index, pin, interval)
+	# Store initial values
+	status_pin_index = index
+	status_pin = pin
+	status_pin_state = 0
+	status_pin_interval = interval
+
+	# Start the interrupt service.
+	call status_notification_next()
+end
+
+# Procedure for falling back to AP mode. This will reset the operating
+# mode setting in PS.
+export procedure reset_operating_mode()
+  call flash_ps_save(FLASH_PS_KEY_MODULE_SERVICE, 4, MODE_AP)
+end
+
+dim nibble_temp
+
+# Save mac address
+export procedure save_mac_address(mac_len, mac_data())
+	# Hex to ASCII conversion
+	mac_address(10:1) = (mac_data(5:1)/$10) + 48 + ((mac_data(5:1)/$10)/10*7)
+	mac_address(11:1) = (mac_data(5:1)&$f) + 48 + ((mac_data(5:1)&$f )/10*7)
+	mac_address(8:1) = (mac_data(4:1)/$10) + 48 + ((mac_data(4:1)/$10)/10*7)
+	mac_address(9:1) = (mac_data(4:1)&$f) + 48 + ((mac_data(4:1)&$f )/10*7)
+	mac_address(6:1) = (mac_data(3:1)/$10) + 48 + ((mac_data(3:1)/$10)/10*7)
+	mac_address(7:1) = (mac_data(3:1)&$f) + 48 + ((mac_data(3:1)&$f )/10*7)
+	mac_address(4:1) = (mac_data(2:1)/$10) + 48 + ((mac_data(2:1)/$10)/10*7)
+	mac_address(5:1) = (mac_data(2:1)&$f) + 48 + ((mac_data(2:1)&$f )/10*7)
+	mac_address(2:1) = (mac_data(1:1)/$10) + 48 + ((mac_data(1:1)/$10)/10*7)
+	mac_address(3:1) = (mac_data(1:1)&$f) + 48 + ((mac_data(1:1)&$f )/10*7)
+	mac_address(0:1) = (mac_data(0:1)/$10)+ 48 + ((mac_data(0:1)/$10)/10*7)
+	mac_address(1:1) = (mac_data(0:1)&$f) + 48 + ((mac_data(0:1)&$f )/10*7)
+	mac_address_len = 12
+end
+
+
+# Import functionality
+import "mcu_serial_tx.bgs"
+import "sta.bgs"
+import "ap.bgs"
+import "api.bgs"
+import "mcu_serial_rx.bgs"
+
+
+
+# Event received when the system has been successfully started up.
+event system_boot(hw, bootloader_version, major, minor, build, revision_len, revision_data)
+	call debug_write_text(11,"System_boot")
+
+	call endpoint_set_streaming_destination(MCU_ENDPOINT,-1)
+	call endpoint_set_active(MCU_ENDPOINT,1)
+
+	# Initialise variables
+	call io_init()
+	call sta_init_mode()
+	call ap_init_mode()
+	call api_init()
+	call serial_mcu_rx_init()
+	operating_mode = MODE_AP
+  
+  ######test-debug
+  # call hardware_set_soft_timer(1000, TIMER_RANDOM, 0)
+  # call initialize_rand(55)
+  ################
+
+	# Read the current operating mode from PS.
+	call flash_ps_load(FLASH_PS_KEY_MODULE_SERVICE)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+	if cmd_result = 0
+		operating_mode = cmd_value(0:cmd_value_len)
+	end if
+
+	# Set the correct operating mode.
+	call sme_set_operating_mode(operating_mode)
+
+	# Read the MAC address, this call will trigger config_mac_address.
+	call config_get_mac(0)(cmd_result, cmd_value_len)
+	if cmd_result != 0
+		# No MAC address was found. This happens after flashing with PICKit. Proceed with startup,
+		# a default MAC address will be used.
+
+		# Enable Wi-Fi, this call will trigger sme_wifi_is_on() event.
+		call sme_wifi_on()
+	end if
+end
+
+# Event received when a MAC address has been received.
+event config_mac_address(hw_interface, mac)
+	# Add the MAC address to the default SSID.
+	call ap_add_mac_to_default_ssid(6,mac(0:6))
+	call save_mac_address(6,mac(0:6))
+
+	# Store the MAC address. This will be overwritten in STA mode.
+	memcpy(bssid(0), mac(0), 6)
+
+	# Enable Wi-Fi, this call will trigger sme_wifi_is_on() event.
+	call sme_wifi_on()
+end
+
+# Event received after Wi-Fi has been switched on.
+event sme_wifi_is_on(state)
+	call debug_write_text(7,"WIFI_ON")
+	if operating_mode = MODE_STA then
+		call debug_write_text(8,"MODE_STA")
+		# Indicate connecting state via the status notification service.
+		call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_STA, STATUS_INTERVAL_CONNECTING)
+		# Start station mode.
+		call sta_start_mode()
+	else
+		call debug_write_text(7,"MODE_AP")
+		# Indicate connecting state via the status notification service.
+		call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_AP, STATUS_INTERVAL_CONNECTING)
+		# Initiate a scan. This needs to be done before starting AP mode.
+		# This call will trigger sme_scanned() event once done.
+		call sme_start_scan(HANDLE_WIFI, 0, 0)
+	end if
+end
+
+# Event received when Wi-Fi has been switched off or there has been
+# a catastrophic failure somewhere. For now assume this means
+# we are switching between modes and turn Wi-Fi on.
+event sme_wifi_is_off(state)
+	call debug_write_text(8,"WIFI_OFF")
+	# Enable Wi-Fi, this call will trigger sme_wifi_is_on() event.
+	call sme_wifi_on()
+end
+
+# Event received when a scan has been completed.
+event sme_scanned(status)
+	call debug_write_text(11,"sme_scanned")
+	if operating_mode = MODE_AP
+		# Scanning has been completed, start AP mode.
+		call ap_start_mode()
+	else
+		call sme_connect_ssid(ssid_len, ssid(0:ssid_len))
+	end if
+end
+
+# Event received when a timer is triggered.
+event hardware_soft_timer(handle)
+	if handle = TIMER_RECONNECTION
+		# Try reconnecting to the network.
+		call sme_connect_ssid(ssid_len, ssid(0:ssid_len))
+	end if
+	if handle = TIMER_STATUS_PIN
+		# Handle status notification.
+		call status_notification_next()
+	end if
+
+	######test-debug
+	# if handle = TIMER_RANDOM
+		# # call rand()
+		# smppt_mode = 7
+		# call rand()
+		# smppt_meas_vin = rand_number
+		# call rand()
+		# smppt_meas_iin = rand_number
+		# call rand()
+		# smppt_meas_vout = rand_number
+		# call rand()
+		# smppt_meas_iout = rand_number
+	# end if
+	################
+end
+
+
+# IO interrupt listener
+event hardware_interrupt(interrupts, timestamp)
+	call process_IO1_WIFI_interrupt(interrupts, timestamp)
+end

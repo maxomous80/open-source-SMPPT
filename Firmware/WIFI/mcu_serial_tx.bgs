@@ -1,0 +1,48 @@
+
+export const MCU_ENDPOINT = 0		# 0 = USART0
+
+
+#####################################################
+#status e risposte
+
+# export const COMM_LEN = 		9 #lunghezza comunizaione standard
+
+# export const COMM_BOOT() =			"\r\n#BOOT\r\n" #avvio
+# export const COMM_WIFI_OFF() =		"\r\n#WIF0\r\n" #wifi radio off
+# export const COMM_WIFI_ON_STA() =	"\r\n#WIF1\r\n" #wifi radio on
+# export const COMM_WIFI_ON_AP() =	"\r\n#WIF2\r\n" #wifi radio on
+# export const COMM_WIFI_CONN_ON() =	"\r\n#CON1\r\n" #wifi connected to/from AP
+# export const COMM_ERROR() =			"\r\n#ERR0\r\n" #errore: riavviare o spegner modulo
+# export const COMM_PING() =			"\r\n#PING\r\n" #ping: ricevuto comando API tramite web server
+
+# invio comandi con "\r\n" davanti, es "\r\n#BOOT\r\n", cosi' se il messaggio arriva nel
+# mezzo di una trasmissione TCP diretta viene sicuramente visto da MCU come un nuovo comando.
+# Altrimenti potrebbe finire in mezzo ad un altra comunicazione e "perdersi".
+
+
+#####################################################
+
+export procedure wifi_to_mcu_transfer_init_notification()
+	call hardware_write_gpio(IO2_WIFI_PORT, IO2_WIFI_MASK, IO2_WIFI_MASK)
+	# call hardware_write_gpio(CTS_WIFI_PORT, CTS_WIFI_MASK, CTS_WIFI_MASK)
+end
+
+export procedure wifi_to_mcu_transfer_completed_notification()
+	call hardware_write_gpio(IO2_WIFI_PORT, IO2_WIFI_MASK, $0000)
+	# call hardware_write_gpio(CTS_WIFI_PORT, CTS_WIFI_MASK, $0000)
+end
+
+#####################################################
+
+# Invia comando attivando e disattivando pin di notifica a MCU
+export procedure send_command(text_to_write_length, text_to_write())
+	call wifi_to_mcu_transfer_init_notification()
+	call endpoint_send(MCU_ENDPOINT,text_to_write_length,text_to_write(0:text_to_write_length))
+	call wifi_to_mcu_transfer_completed_notification()
+end
+
+# Invia testo sulla seriale alla MCU, senza toccare i pin di notifica
+export procedure mcu_write_text(text_to_write_length, text_to_write())
+	call endpoint_send(MCU_ENDPOINT,text_to_write_length,text_to_write(0:text_to_write_length))
+end
+

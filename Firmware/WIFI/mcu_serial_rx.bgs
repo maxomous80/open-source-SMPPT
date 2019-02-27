@@ -1,0 +1,97 @@
+
+dim SERIAL_CMD_IN_LEN
+dim SERIAL_CMD_IN(255)
+
+#####################################################
+#comandi inviati da MCU
+
+export const CMD_LEN = 			3 #lunghezza comandi standard
+
+#comando STATUS
+export const CMD_STATUS() = 	"#ST" #ricezione status MPPT
+export const CMD_SETTINGS() = 	"#PS" #ricezione solo parametri MPPT
+
+#comandi RESET
+export const CMD_RESET() = 		"#R0"	#reset modulo
+export const CMD_RESET_FULL() = "#R1" 	#reset modulo e cancella mode, ssid, pwd e preferenze
+
+
+#####################################################
+
+procedure process_command()
+	call debug_write_text(15, "process_command")
+	call debug_write_text_eq_number(SERIAL_CMD_IN_LEN, 17, "SERIAL_CMD_IN_LEN")
+	call debug_write_text(SERIAL_CMD_IN_LEN, SERIAL_CMD_IN(0:SERIAL_CMD_IN_LEN))
+	
+	if memcmp(SERIAL_CMD_IN(0), CMD_STATUS(0),CMD_LEN) then
+		meas_data_length=0
+		memcpy (meas_data(meas_data_length), SERIAL_CMD_IN(CMD_LEN+1), SERIAL_CMD_IN_LEN - CMD_LEN - 1)
+		meas_data_length = meas_data_length + SERIAL_CMD_IN_LEN - CMD_LEN - 1
+		call parse_meas_data()
+	end if
+	if memcmp(SERIAL_CMD_IN(0), CMD_SETTINGS(0),CMD_LEN) then
+		meas_data_length=0
+		memcpy (meas_data(meas_data_length), SERIAL_CMD_IN(CMD_LEN+1), SERIAL_CMD_IN_LEN - CMD_LEN - 1)
+		meas_data_length = meas_data_length + SERIAL_CMD_IN_LEN - CMD_LEN - 1
+		call parse_settings_data()
+	end if
+	if memcmp(SERIAL_CMD_IN(0), CMD_RESET(0),CMD_LEN) then
+		call system_reset(0)
+		#TODO inviare conferma? (anche se il reset si può monitorare leggendo il reboot)
+	end if
+	if memcmp(SERIAL_CMD_IN(0), CMD_RESET_FULL(0),CMD_LEN) then
+		call sta_reset_mode()
+		call ap_reset_mode()
+		call reset_operating_mode()
+		call system_reset(0)
+		#TODO inviare conferma? (anche se il reset si può monitorare leggendo il reboot)
+	end if
+	
+	SERIAL_CMD_IN_LEN = 0
+end
+
+#####################################################
+
+
+procedure mcu_to_wifi_transfer_init_notification()
+	#TODO assicurarsi che il comando precedente sia stato processato completamente prima di poter ricevere il nuovo
+	call debug_write_text(3,"<<<")
+	# SERIAL_CMD_IN_LEN = 0 #l'interrupt potrebbe scattare dopo che ha iniziato a ricevere primo byte
+	# call endpoint_set_active(MCU_ENDPOINT, 1)
+end
+
+procedure mcu_to_wifi_transfer_completed_notification()
+	# call endpoint_set_active(MCU_ENDPOINT, 0)
+	call debug_write_text(3,">>>")
+	call process_command()
+end
+
+#####################################################
+
+event endpoint_data(endpoint, data_len, data_data)
+	if endpoint = MCU_ENDPOINT then
+		memcpy(SERIAL_CMD_IN(SERIAL_CMD_IN_LEN), data_data(0), data_len)
+		SERIAL_CMD_IN_LEN = SERIAL_CMD_IN_LEN + data_len
+	end if	
+end
+
+export procedure serial_mcu_rx_init()
+	SERIAL_CMD_IN_LEN = 0
+end
+
+#####################################################
+
+dim read_result
+
+export procedure process_IO1_WIFI_interrupt(interrupts, timestamp)
+	if (interrupts & IO1_WIFI_MASK)
+		# read pin state to detect if this was falling or rising edge
+		call hardware_read_gpio(IO1_WIFI_PORT, IO1_WIFI_MASK)(cmd_result, read_result)
+		if read_result = IO1_WIFI_MASK then
+			call mcu_to_wifi_transfer_init_notification()
+		else
+			call mcu_to_wifi_transfer_completed_notification()
+		end if
+	end if
+end
+

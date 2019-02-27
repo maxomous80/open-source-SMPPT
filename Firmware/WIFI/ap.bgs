@@ -1,0 +1,212 @@
+# ap.bgs - access point script file for HTTP server example
+
+# Constants
+const MODE_AP = 2                    # AP mode value
+const AP_PATH_ROOT_LEN = 1           # AP root path length
+const AP_PATH_ROOT() = "/"           # AP root path
+const AP_PATH_API_LEN = 4            # AP BGAPI path length
+const AP_PATH_API() = "/api"         # AP BGAPI path
+
+# Variables
+dim ap_default_channel          # Default AP channel
+dim ap_default_security         # Default AP security mode
+dim ap_default_ssid_len         # Default AP SSID length
+dim ap_default_ssid(32)         # Default AP SSID
+dim ap_default_dns_len          # Default AP DNS name length
+dim ap_default_dns(32)          # Default AP DNS name
+dim ap_default_ipv4_addr        # Default AP IP address
+dim ap_default_ipv4_netmask     # Default AP netmask
+export dim ap_channel           # AP channel
+export dim ap_security          # AP security mode
+dim ap_ipv4_addr                # AP IP address
+dim ap_ipv4_netmask             # AP netmask
+dim ap_enable_https             # Whether HTTP server is enabled in AP mode
+dim ap_enable_dhcps             # Whether DHCP server is enabled in AP mode
+dim ap_enable_dnss              # Whether DNS server is enabled in AP mode
+
+# Procedure for initialising AP mode variables.
+export procedure ap_init_mode()
+  # Default operating mode is AP. If no AP parameters are stored in PS,
+  # channel 1, no security and SSID "WGM110 Example" are used.
+  ap_default_channel = 1
+  ap_default_security = 0
+  ap_default_ssid_len = 5
+  ap_default_ssid(0:ap_default_ssid_len) = "SMPPT"
+
+  # If no AP IP settings are stored in PS, the default configuration
+  # is 192.168.1.1/255.255.255.0.
+  ap_default_ipv4_addr = 192.168.1.1
+  ap_default_ipv4_netmask = 255.255.255.0
+
+  # Default DNS name is "smppt.com" unless overwritten by PS.
+  ap_default_dns_len = 9
+  ap_default_dns(0:ap_default_dns_len) = "smppt.com"
+
+  # HTTP server and DHCP server are enabled, DNS server is disabled
+  # unless overwritten by PS.
+  ap_enable_https = 1
+  ap_enable_dhcps = 1
+  ap_enable_dnss = 0
+end
+
+# Procedure for restoring AP mode to factory settings.
+export procedure ap_reset_mode()
+  call flash_ps_erase(FLASH_PS_KEY_AP_SSID)
+  call flash_ps_erase(FLASH_PS_KEY_AP_CHANNEL)
+  call flash_ps_erase(FLASH_PS_KEY_AP_SECURITY)
+  call flash_ps_erase(FLASH_PS_KEY_AP_PW)
+  call flash_ps_erase(FLASH_PS_KEY_AP_IPV4_ADDR)
+  call flash_ps_erase(FLASH_PS_KEY_AP_IPV4_NETMASK)
+  call flash_ps_erase(FLASH_PS_KEY_DHCPS_ENABLE)
+  call flash_ps_erase(FLASH_PS_KEY_DHCPS_SPACE)
+  call flash_ps_erase(FLASH_PS_KEY_DNSS_ENABLE)
+  call flash_ps_erase(FLASH_PS_KEY_DNSS_URL)
+  call flash_ps_erase(FLASH_PS_KEY_DNSS_ANY_URL)
+end
+
+# Procedure for converting the given 4-bit value to a hex character,
+# adding it to default_ap_ssid buffer and incrementing default_ap_ssid_len.
+procedure ap_add_nibble_to_default_ssid(nibble)
+  if nibble < $a then
+      ap_default_ssid(ap_default_ssid_len:1) = nibble + $30
+  else
+      ap_default_ssid(ap_default_ssid_len:1) = nibble + $37
+  end if
+  ap_default_ssid_len = ap_default_ssid_len + 1
+end
+
+# Procedure for converting the given MAC address to a hex string, adding
+# it to default_ap_ssid buffer and incrementing default_ap_ssid_len.
+export procedure ap_add_mac_to_default_ssid(mac_len, mac_data())
+  ap_default_ssid(ap_default_ssid_len:1) = "_"
+  ap_default_ssid_len = ap_default_ssid_len + 1
+  cmd_result = 0
+  while cmd_result < mac_len
+    call ap_add_nibble_to_default_ssid(mac_data(cmd_result:1) / 16)
+    call ap_add_nibble_to_default_ssid(mac_data(cmd_result:1) & $F)
+    cmd_result = cmd_result + 1
+  end while
+end
+
+# Procedure for starting AP mode.
+export procedure ap_start_mode()
+  # Read AP IP address from PS.
+  call flash_ps_load(FLASH_PS_KEY_AP_IPV4_ADDR)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    ap_ipv4_addr = cmd_value(0:cmd_value_len)
+  else
+    # PS has no valid parameter, use the default value.
+    ap_ipv4_addr = ap_default_ipv4_addr
+
+    # Store the default to PS since this key is not automatically updated by the stack.
+    call flash_ps_save(FLASH_PS_KEY_AP_IPV4_ADDR, 4, ap_ipv4_addr)
+  end if
+
+  # Read AP netmask from PS.
+  call flash_ps_load(FLASH_PS_KEY_AP_IPV4_NETMASK)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    ap_ipv4_netmask = cmd_value(0:cmd_value_len)
+  else
+    # PS has no valid parameter, use the default value.
+    ap_ipv4_netmask = ap_default_ipv4_netmask
+
+    # Store the default to PS since this key is not automatically updated by the stack.
+    call flash_ps_save(FLASH_PS_KEY_AP_IPV4_NETMASK, 4, ap_ipv4_netmask)
+  end if
+
+  # Set a static IP address.
+  call tcpip_configure(ap_ipv4_addr, ap_ipv4_netmask, ap_ipv4_addr, 0)
+
+  # Check whether DHCP server and DNS server should be enabled.
+  call flash_ps_load(FLASH_PS_KEY_DHCPS_ENABLE)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    ap_enable_dhcps = cmd_value(0:cmd_value_len)
+  end if
+  call flash_ps_load(FLASH_PS_KEY_DNSS_ENABLE)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    ap_enable_dnss = cmd_value(0:cmd_value_len)
+  end if
+
+  # Disable all power save functionality.
+  call system_set_max_power_saving_state(0)
+
+  # Read AP channel from PS.
+  call flash_ps_load(FLASH_PS_KEY_AP_CHANNEL)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    ap_channel = cmd_value(0:cmd_value_len)
+  else
+    # PS has no valid parameter, use the default value.
+    ap_channel = ap_default_channel
+  end if
+
+  # Read AP security mode from PS.
+  call flash_ps_load(FLASH_PS_KEY_AP_SECURITY)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    ap_security = cmd_value(0:cmd_value_len)
+  else
+    # PS has no valid parameter, use the default value.
+    ap_security = ap_default_security
+  end if
+
+  # Read AP SSID from PS.
+  call flash_ps_load(FLASH_PS_KEY_AP_SSID)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    ssid_len = cmd_value_len
+    memcpy(ssid(0), cmd_value(0), ssid_len)
+  else
+    # PS has no valid parameter, use the default value.
+    ssid_len = ap_default_ssid_len
+    memcpy(ssid(0), ap_default_ssid(0), ssid_len)
+  end if
+
+  # Read AP passphrase from PS.
+  call flash_ps_load(FLASH_PS_KEY_AP_PW)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    # Set the passphrase.
+    call sme_set_ap_password(cmd_value_len, cmd_value(0:cmd_value_len))
+
+    # Start the AP mode. This call will trigger sme_ap_mode_started() event on success
+    # and sme_ap_mode_failed on failure.
+    call sme_start_ap_mode(ap_channel, ap_security, ssid_len, ssid(0:ssid_len))
+  else
+    # No passphrase in PS. If not using security, proceed with connection. Otherwise
+    # indicate error state via the status notification service.
+    if ap_security = 0
+      # Start the AP mode. This call will trigger sme_ap_mode_started() event on success
+      # and sme_ap_mode_failed on failure.
+      call sme_start_ap_mode(ap_channel, ap_security, ssid_len, ssid(0:ssid_len))
+    else
+      call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_AP, STATUS_INTERVAL_ERROR)
+    end if
+  end if
+end
+
+# Event received after AP mode has been started.
+event sme_ap_mode_started(hw_interface)
+  # Read AP DNS name from PS.
+  call flash_ps_load(FLASH_PS_KEY_DNSS_URL)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result != 0
+    # PS has no valid parameter, use the default value.
+    call flash_ps_save(FLASH_PS_KEY_DNSS_URL, ap_default_dns_len, ap_default_dns(0:ap_default_dns_len))
+  end if
+
+  # Configure HTTP server paths.
+  call https_add_path(PATH_DEVICE_API, AP_PATH_API_LEN, AP_PATH_API(:))
+  call https_add_path(PATH_DEVICE_FLASH, AP_PATH_ROOT_LEN, AP_PATH_ROOT(:))
+
+  # Enable/disable HTTP/DHCP/DNS server.
+  call https_enable(ap_enable_https, ap_enable_dhcps, ap_enable_dnss)
+
+  # Indicate connected state via the status notification service.
+  call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_AP, STATUS_INTERVAL_CONNECTED)
+end
+
+# Event received after AP mode startup fails.
+event sme_ap_mode_failed(reason, hw_interface)
+  # Indicate error state via the status notification service.
+  call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_AP, STATUS_INTERVAL_ERROR)
+end
+
+# Event received after AP mode has been stopped.
+event sme_ap_mode_stopped(hw_interface)
+end

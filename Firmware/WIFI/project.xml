@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <scripting>
+        <script in="main.bgs"/>
+    </scripting>
+    <hardware>
+		<!-- UART MCU (PE10, PE11) -->
+		<uart channel="0" location="0" baud="38400" api="false" handshake="false"/>
+		<!-- UART DEBUG-BGTOOL (PC0, PC1) -->
+		<uart channel="1" location="0" baud="115200" api="true" handshake="false"/>
+		<!-- DEBUG DEV BOARD -->
+		<!-- <usb descriptor="cdc.xml" api="true"/> -->
+    </hardware>
+    <image out="wifi_smppt.bin" out_hex="wifi_smppt.hex"/>
+    <files>
+        <file path="webserver/index.html"/>
+        <file path="webserver/smppt.html"/>
+        <file path="webserver/wstatus.html"/>
+        <file path="webserver/sta.html"/>
+        <file path="webserver/ap.html"/>
+        <file path="webserver/style.css"/>
+		<file path="webserver/logoENEA.png"/>
+    </files>
+</project>

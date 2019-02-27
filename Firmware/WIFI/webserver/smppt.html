@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SMPPT</title>
+<link rel="stylesheet" href="style.css" media="screen"/>
+</head>
+<nav class="cls-nav-top">
+  <ul class="cls-menu-top">
+     <li class="cls-menu-top-logo"><img src="logoENEA.png"></li>
+     <li class="cls-menu-top-item"><a href="index.html">SMPPT Status</a></li>
+     <li class="cls-menu-top-item"><a href="smppt.html">SMPPT Settings</a></li>
+     <li class="cls-menu-top-item"><a href="wstatus.html">WiFi Status</a></li>
+     <li class="cls-menu-top-item"><a href="ap.html">Access Point</a></li>
+     <li class="cls-menu-top-item"><a href="sta.html">Station</a></li>
+  </ul>
+</nav>
+<body>
+<script>
+  var myStoredSettings = null;
+  var myCurrentSettings = {"mppt": null, "freq": null, "dt": null, "m1": null, "m3": null};
+  
+  function retrieveSettings(settings) {
+	settings.mppt = document.getElementById("id-input-mppt-enabled").checked ? 1 : 0;
+    settings.freq = document.getElementById("id-select-freq").selectedIndex;
+    settings.dt = document.getElementById("id-select-dt").selectedIndex;
+	settings.m1 = Math.round( document.getElementById("id-input-m1").value * 4095/100 );
+	settings.m3 = Math.round( document.getElementById("id-input-m3").value * 4095/100 );
+  }
+
+  function updateSettings(settings) {
+	document.getElementById("id-input-mppt-enabled").checked = settings.mppt;
+    document.getElementById("id-select-freq").selectedIndex = settings.freq;
+    document.getElementById("id-select-dt").selectedIndex = settings.dt;
+	document.getElementById("id-input-m1").value = Math.round( settings.m1 * 100/4095);
+    document.getElementById("id-input-m3").value = Math.round( settings.m3 * 100/4095);
+  }
+
+  function doGetSettings() {
+    document.getElementById("validateM1").innerHTML = "";
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        if (xhr.status === 200) {
+          myStoredSettings = JSON.parse(xhr.responseText);
+          updateSettings(myStoredSettings);
+        }		
+      }
+    };
+    xhr.open("GET", "/api/smppt/settings", true);
+    xhr.send();
+  }
+
+  function doStoreSetting(key, value) {
+    var xhr = new XMLHttpRequest();
+	xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        if (xhr.status === 200) {
+          document.getElementById("validateM1").innerHTML = "OK";
+        } else {
+		  document.getElementById("validateM1").innerHTML = "Error";
+		}
+      }
+    };
+    var item = key.replace(/_/g, "/");
+    xhr.open("POST", "/api/smppt/settings/" + item, true);
+    xhr.send(value);
+  }
+
+  function doApply() {
+    var test = validateM1() * validateM3();
+	if (test == 1) {	
+		retrieveSettings(myCurrentSettings);
+		for (key in myCurrentSettings) {
+		  if (myCurrentSettings[key] !== myStoredSettings[key]) {
+			doStoreSetting(key, myCurrentSettings[key]);
+			myStoredSettings[key] = myCurrentSettings[key];
+		  }
+		}
+	}
+  }
+  
+  function doRefresh() {
+    doGetSettings();
+  }
+
+  function validateM1() {
+	var duty = parseInt(document.getElementById("id-input-m1").value);
+	if (duty < 0 || duty > 100) {
+        document.getElementById("validateM1").innerHTML = 
+        "Duty cycle M1 must be [0-100]";
+        return 0;
+    } else {
+		document.getElementById("validateM1").innerHTML = "";
+		return 1;
+	}
+  }
+
+  function validateM3() {
+	var duty = parseInt(document.getElementById("id-input-m3").value);
+	if (duty < 0 || duty > 100) {
+        document.getElementById("validateM3").innerHTML = 
+        "Duty cycle M3 must be [0-100]";
+        return 0;
+    } else {
+		document.getElementById("validateM3").innerHTML = "";
+		return 1;
+	}
+  }
+
+  window.onload = function() {
+    doGetSettings();
+  };
+</script>
+<h1 class="cls-heading">SMPPT Settings:</h1>
+
+<p id="validateM1"></p>
+<p id="validateM3"></p>
+
+<form class="cls-form-setting">
+  <label class="cls-label-setting" for="id-input-mppt-enabled" id="id-label-mppt-enabled">MPPT:</label>
+  <input class="cls-input-setting" name="mppt-enabled" id="id-input-mppt-enabled" type="checkbox"><br>
+  <br>
+  <label class="cls-label-setting" for="id-select-freq" id="id-label-freq">Frequency:</label>
+  <select name="freq" id="id-select-freq">
+    <option value="0">100 kHz</option>
+    <option value="1">80 kHz</option>
+    <option value="2">120 kHz</option>
+    <option value="3">150 kHz</option>
+    <option value="4">175 kHz</option>
+    <option value="5">200 kHz</option>
+    <option value="6">225 kHz</option>
+    <option value="7">250 kHz</option>
+  </select><br>
+  <br>
+  <label class="cls-label-setting" for="id-input-dt" id="id-label-dt">Dead time:</label>
+  <select name="dt" id="id-select-dt">
+    <option value="0">104 ns</option>
+    <option value="1">21 ns</option>
+    <option value="2">41 ns</option>
+    <option value="3">62 ns</option>
+    <option value="4">83 ns</option>
+    <option value="5">104 ns</option>
+    <option value="6">125 ns</option>
+    <option value="7">145 ns</option>
+    <option value="8">166 ns</option>
+    <option value="9">187 ns</option>
+    <option value="10">208 ns</option>
+    <option value="11">229 ns</option>
+    <option value="12">250 ns</option>
+    <option value="13">271 ns</option>
+    <option value="14">291 ns</option>
+    <option value="15">312 ns</option>
+  </select><br>
+  <br>
+  <label class="cls-label-setting" for="id-input-m1" id="id-label-m1">Duty cycle M1 (%):</label>
+  <input class="cls-input-setting" name="m1" id="id-input-m1" type="number" min="0" max="100"><br>
+  <br>
+  <label class="cls-label-setting" for="id-input-m3" id="id-label-m3">Duty cycle M3 (%):</label>
+  <input class="cls-input-setting" name="m3" id="id-input-m3" type="number" min="0" max="100"><br>
+  <br>
+  <button class="cls-input-action-button" name="refresh" formaction="javascript:doRefresh();">Refresh</button>
+  <br>
+  <button class="cls-input-action-button" name="apply" formaction="javascript:doApply();">Apply</button>
+</form>
+
+<p id="error"></p>
+
+</body>
+</html>

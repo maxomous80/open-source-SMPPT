@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SMPPT</title>
+<link rel="stylesheet" href="style.css" media="screen"/>
+</head>
+<nav class="cls-nav-top">
+  <ul class="cls-menu-top">
+	 <li class="cls-menu-top-logo"><img src="logoENEA.png"></li>
+     <li class="cls-menu-top-item"><a href="index.html">SMPPT Status</a></li>
+     <li class="cls-menu-top-item"><a href="smppt.html">SMPPT Settings</a></li>
+     <li class="cls-menu-top-item"><a href="wstatus.html">WiFi Status</a></li>
+     <li class="cls-menu-top-item"><a href="ap.html">Access Point</a></li>
+     <li class="cls-menu-top-item"><a href="sta.html">Station</a></li>
+  </ul>
+</nav>
+<body>
+<script>
+function updateStatus(status) {
+	document.getElementById("id-span-status-mac").innerHTML = status.mac;
+
+	document.getElementById("id-span-status-mode-boost").innerHTML = "";
+	document.getElementById("id-span-status-mode-buck").innerHTML = "";
+	document.getElementById("id-span-status-mode-bypass").innerHTML = "";
+	if (status.mode & 1) document.getElementById("id-span-status-mode-boost").innerHTML = "BOOST ";
+	if (status.mode & 2) document.getElementById("id-span-status-mode-buck").innerHTML = "BUCK";
+	if (status.mode & 4) document.getElementById("id-span-status-mode-bypass").innerHTML = "BYPASS";
+
+	document.getElementById("id-span-status-vin").innerHTML = status.meas.Vin/100 + " V";
+	document.getElementById("id-span-status-iin").innerHTML = status.meas.Iin/1000 + " A";
+	document.getElementById("id-span-status-vout").innerHTML = status.meas.Vout/100 + " V";
+	document.getElementById("id-span-status-iout").innerHTML = status.meas.Iout/1000 + " A";
+	
+	var Pin = Math.round(status.meas.Vin*status.meas.Iin/100000 *10)/10;
+	var Pout = Math.round(status.meas.Vout*status.meas.Iout/100000 *10)/10;
+	var eff = Math.round(Pout/Pin*100 * 10)/10;
+	if (isNaN(eff)) eff='-';
+	else if (eff>100) eff=100;
+	document.getElementById("id-span-status-pin").innerHTML = Pin + " W";
+	document.getElementById("id-span-status-pout").innerHTML = Pout + " W";
+	document.getElementById("id-span-status-eff").innerHTML = eff + "%";
+	
+	document.getElementById("id-span-status-temp1").innerHTML = Math.round(status.temp1/10)/10 + "&deg;C";
+	document.getElementById("id-span-status-temp2").innerHTML = Math.round(status.temp2/10)/10 + "&deg;C";
+}
+
+function doGetSMPPTStatus() {
+	var xhr = new XMLHttpRequest();
+	xhr.onreadystatechange = function() {
+		if (xhr.readyState === 4) {
+			if (xhr.status === 200) {
+				updateStatus(JSON.parse(xhr.responseText));
+			}
+		}
+	};
+	xhr.open("GET", "/api/smppt/status", true);
+	xhr.send();
+}
+
+window.onload = function() {
+	doGetSMPPTStatus();
+	setInterval(function(){
+		doGetSMPPTStatus();
+	}, 1000);
+};
+</script>
+<h1 class="cls-heading">SMPPT Status:</h1>
+<span class="cls-span-status">ID:</span><span id="id-span-status-mac"></span><br>
+<br>
+<span class="cls-span-status">Mode:</span>
+	<span id="id-span-status-mode-buck"></span>
+	<span id="id-span-status-mode-boost"></span>
+	<span id="id-span-status-mode-bypass"></span><br>
+<br>
+<span class="cls-span-status">Vin:</span><span id="id-span-status-vin"></span><br>
+<span class="cls-span-status">Iin:</span><span id="id-span-status-iin"></span><br>
+<span class="cls-span-status">Vout:</span><span id="id-span-status-vout"></span><br>
+<span class="cls-span-status">Iout:</span><span id="id-span-status-iout"></span><br>
+<br>
+<span class="cls-span-status">Pin:</span><span id="id-span-status-pin"></span><br>
+<span class="cls-span-status">Pout:</span><span id="id-span-status-pout"></span><br>
+<span class="cls-span-status">&eta;:</span><span id="id-span-status-eff"></span><br>
+<br>
+<span class="cls-span-status">Temp1:</span><span id="id-span-status-temp1"></span><br>
+<span class="cls-span-status">Temp2:</span><span id="id-span-status-temp2"></span><br>
+</body>
+</html>

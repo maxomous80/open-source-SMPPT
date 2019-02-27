@@ -1,0 +1,65 @@
+# io.bgs - I2C script file for I/O constants and definitions
+
+# Constants for GPIO configuration
+const GPIO_PORTA = 0
+const GPIO_PORTB = 1
+const GPIO_PORTC = 2
+const GPIO_PORTD = 3
+const GPIO_PORTE = 4
+const GPIO_PORTF = 5
+
+const GPIO_MODE_DISABLED = 0
+const GPIO_MODE_INPUT = 1
+const GPIO_MODE_INPUT_PULL = 2
+const GPIO_MODE_INPUT_PULL_FILTER = 3
+const GPIO_MODE_OUTPUT = 4
+
+const GPIO_PULL_DOWN = 0
+const GPIO_PULL_UP = 1
+const GPIO_FILTER_OFF = 0
+const GPIO_FILTER_ON = 1
+const GPIO_OUTPUT_LOW = 0
+const GPIO_OUTPUT_HIGH = 1
+
+const GPIO_TRIGGER_DISABLED = 0
+const GPIO_TRIGGER_RISING = 1
+const GPIO_TRIGGER_FALLING = 2
+const GPIO_TRIGGER_BOTH = 3
+
+#####################################################
+
+export const STATUS_PIN_STA = $4000     # Pin used for STA status notifications (PE14)
+export const STATUS_PIN_AP =  $8000     # Pin used for AP status notifications (PE15)
+export const STATUS_PIN_INDEX = 4       # Port index for PIN_STA and PIN_AP (Port E)
+
+#####################################################
+
+export const IO1_WIFI_MASK = $1000      # Pin used for mcu notification(PB112)
+export const IO1_WIFI_PORT = 1          # Port index for IO1_WIFI (Port B)
+export const IO1_WIFI_PIN = 12          # Port index for IO1_WIFI (PB12)
+
+export const IO2_WIFI_MASK = $800       # Pin used for mcu notification(PB11)
+export const IO2_WIFI_PORT = 1          # Port index for IO2_WIFI (Port B)
+export const IO2_WIFI_PIN = 11          # Port index for IO2_WIFI (PB11)
+
+#CTS usata per segnalare invio dati uart al MCU al posto di IO2_WIFI_PIN
+export const CTS_WIFI_MASK = $1000      # Pin used for mcu notification(PE12)
+export const CTS_WIFI_PORT = 4          # Port index for IO2_WIFI (Port E)
+export const CTS_WIFI_PIN = 12          # Port index for IO2_WIFI (PE12)
+
+#RTS attualmente usato come uscita del MCU per debug
+export const RTS_WIFI_MASK = $2000      # Pin used for mcu notification(PE13)
+export const RTS_WIFI_PORT = 4          # Port index for IO2_WIFI (Port E)
+export const RTS_WIFI_PIN = 13          # Port index for IO2_WIFI (PE13)
+
+#####################################################
+
+export procedure io_init()
+	# Config IO port direction
+	call hardware_configure_gpio(IO2_WIFI_PORT, IO2_WIFI_PIN, GPIO_MODE_OUTPUT, GPIO_OUTPUT_LOW)
+	# call hardware_configure_gpio(CTS_WIFI_PORT, CTS_WIFI_PIN, GPIO_MODE_OUTPUT, GPIO_OUTPUT_LOW)
+	
+	# Configure GPIO for interrupt
+	call hardware_configure_gpio(IO1_WIFI_PORT, IO1_WIFI_PIN, GPIO_MODE_INPUT, GPIO_FILTER_ON)
+	call hardware_configure_gpio_interrupt(IO1_WIFI_PORT, IO1_WIFI_PIN, GPIO_TRIGGER_BOTH)
+end

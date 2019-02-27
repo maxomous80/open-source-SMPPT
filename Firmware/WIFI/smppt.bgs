@@ -1,0 +1,195 @@
+#smppt.bgs
+
+export dim smppt_mode	#ogni bit ha un significato: 000->BYPASS-BUCK-BOOST
+
+export dim smppt_temp1	#temperature board1
+export dim smppt_temp2	#temperature board2
+
+#per ASCII mode
+# export dim smppt_meas_vin(4)
+# export dim smppt_meas_iin(4)
+# export dim smppt_meas_vout(4)
+# export dim smppt_meas_iout(4)
+#export const smppt_meas_len = 4
+#per RTU mode
+export dim smppt_meas_vin
+export dim smppt_meas_iin
+export dim smppt_meas_vout
+export dim smppt_meas_iout
+
+export dim smppt_setting_mppt
+export dim smppt_setting_force
+export dim smppt_setting_freq
+export dim smppt_setting_dt
+export dim smppt_setting_m1
+export dim smppt_setting_m3
+export dim smppt_setting_algo
+
+
+############################################
+
+# SMPPT status (GET /api/smppt/status)
+export const API_SMPPT_STATUS_RESOURCE_LEN = 17
+export const API_SMPPT_STATUS_RESOURCE() = "/api/smppt/status"
+
+# SMPPT read settings (GET /api/smppt/setting)
+export const API_SMPPT_SETTINGS_RESOURCE_LEN = 19
+export const API_SMPPT_SETTINGS_RESOURCE() = "/api/smppt/settings"
+
+# SMPPT write settings (POST /api/smppt/setting/item)
+export const API_SMPPT_SETTINGS_ITEM_RESOURCE_LEN = 20
+export const API_SMPPT_SETTINGS_ITEM_RESOURCE() = "/api/smppt/settings/"
+
+### SMPPT write settings items ###
+# SMPPT mppt on/off
+export const API_SMPPT_MPPT_RESOURCE_LEN = 4
+export const API_SMPPT_MPPT_RESOURCE() = "mppt"
+# SMPPT mppt algorithm
+export const API_SMPPT_ALGO_RESOURCE_LEN = 4
+export const API_SMPPT_ALGO_RESOURCE() = "algo"
+# SMPPT force on/off
+export const API_SMPPT_FORCE_RESOURCE_LEN = 5
+export const API_SMPPT_FORCE_RESOURCE() = "force"
+# SMPPT frequenza
+export const API_SMPPT_FREQ_RESOURCE_LEN = 4
+export const API_SMPPT_FREQ_RESOURCE() = "freq"
+# SMPPT dead time
+export const API_SMPPT_DT_RESOURCE_LEN = 2
+export const API_SMPPT_DT_RESOURCE() = "dt"
+# SMPPT duty M1
+export const API_SMPPT_M1_RESOURCE_LEN = 2
+export const API_SMPPT_M1_RESOURCE() = "m1"
+# SMPPT duty M3
+export const API_SMPPT_M3_RESOURCE_LEN = 2
+export const API_SMPPT_M3_RESOURCE() = "m3"
+
+############################################
+
+
+### SMPPT JSON reply fields ###
+export const API_PARAM_JSON_MAC_LEN = 3
+export const API_PARAM_JSON_MAC() = "mac"
+
+export const API_PARAM_JSON_SMODE_LEN = 4
+export const API_PARAM_JSON_SMODE() = "mode"
+
+export const API_PARAM_JSON_TEMP1_LEN = 5
+export const API_PARAM_JSON_TEMP1() = "temp1"
+export const API_PARAM_JSON_TEMP2_LEN = 5
+export const API_PARAM_JSON_TEMP2() = "temp2"
+
+export const API_PARAM_JSON_MEAS_LEN = 4
+export const API_PARAM_JSON_MEAS() = "meas"
+export const API_PARAM_JSON_VIN_LEN = 3
+export const API_PARAM_JSON_VIN() = "Vin"
+export const API_PARAM_JSON_VOUT_LEN = 4
+export const API_PARAM_JSON_VOUT() = "Vout"
+export const API_PARAM_JSON_IIN_LEN = 3
+export const API_PARAM_JSON_IIN() = "Iin"
+export const API_PARAM_JSON_IOUT_LEN = 4
+export const API_PARAM_JSON_IOUT() = "Iout"
+
+
+############################################
+
+export dim meas_data(255)
+export dim meas_data_length
+
+dim temp(10)
+
+#decodidica dati ricevuti
+export procedure parse_meas_data()
+	
+	#ASCII mode, comma separated
+	# call util_atoi(1, meas_data(0:1))(smppt_mode)
+	# memcpy(smppt_meas_vin(0), meas_data(2), 4)
+	# memcpy(smppt_meas_iin(0), meas_data(7), 4)
+	# memcpy(smppt_meas_vout(0), meas_data(12), 4)
+	# memcpy(smppt_meas_iout(0), meas_data(17), 4)
+	
+	#RTU mode
+	# memcpy(temp(0), meas_data(0), 1)
+	# smppt_mode = temp(0:4)
+	# memcpy(temp(0), meas_data(1), 2)
+	# smppt_meas_vin = temp(0:4)
+	# memcpy(temp(0), meas_data(3), 2)
+	# smppt_meas_iin = temp(0:4)
+	# memcpy(temp(0), meas_data(5), 2)
+	# smppt_meas_vout = temp(0:4)
+	# memcpy(temp(0), meas_data(7), 2)
+	# smppt_meas_iout = temp(0:4)
+	
+	#RTU mode alt 
+	smppt_mode = 0
+	smppt_meas_vin = 0
+	smppt_meas_iin =0
+	smppt_meas_vout = 0
+	smppt_meas_iout = 0
+	smppt_temp1 = 0
+	smppt_temp2 = 0
+
+	smppt_mode = meas_data(0:1)
+	smppt_meas_vin = meas_data(1:2)
+	smppt_meas_iin = meas_data(3:2)
+	smppt_meas_vout = meas_data(5:2)
+	smppt_meas_iout = meas_data(7:2)
+	smppt_temp1 = meas_data(9:2)
+	smppt_temp2 = meas_data(11:2)
+	
+	#parametri MPPT
+	smppt_setting_mppt = 0
+	smppt_setting_force = 0
+	smppt_setting_freq = 0
+	smppt_setting_dt = 0
+	smppt_setting_m1 = 0
+	smppt_setting_m3 = 0
+	smppt_setting_algo = 0
+
+	smppt_setting_mppt = meas_data(13:1)
+	smppt_setting_force = meas_data(14:1)
+	smppt_setting_freq = meas_data(15:1)
+	smppt_setting_dt = meas_data(16:1)
+	smppt_setting_m1 = meas_data(17:2)
+	smppt_setting_m3 = meas_data(19:2)
+	smppt_setting_algo = meas_data(21:1)
+	
+	# call debug_write_text_eq_number(smppt_mode, 10, "smppt_mode")
+	# call debug_write_text_eq_number(smppt_meas_vin, 14, "smppt_meas_vin")
+	# call debug_write_text_eq_number(smppt_meas_iin, 14, "smppt_meas_iin")
+	# call debug_write_text_eq_number(smppt_meas_vout, 15, "smppt_meas_vout")
+	# call debug_write_text_eq_number(smppt_meas_iout, 15, "smppt_meas_iout")
+	# call debug_write_text_eq_number(smppt_temp1, 11, "smppt_temp1")
+	# call debug_write_text_eq_number(smppt_temp2, 11, "smppt_temp2")
+	
+end
+
+# decodidica dati ricevuti (solo parametri MPPT)
+export procedure parse_settings_data()
+	
+	smppt_setting_mppt = 0
+	smppt_setting_force = 0
+	smppt_setting_freq = 0
+	smppt_setting_dt = 0
+	smppt_setting_m1 = 0
+	smppt_setting_m3 = 0
+	smppt_setting_algo = 0
+
+	smppt_setting_mppt = meas_data(0:1)
+	smppt_setting_force = meas_data(1:1)
+	smppt_setting_freq = meas_data(2:1)
+	smppt_setting_dt = meas_data(3:1)
+	smppt_setting_m1 = meas_data(4:2)
+	smppt_setting_m3 = meas_data(6:2)
+	smppt_setting_algo = meas_data(8:1)
+	
+	# call debug_write_text_eq_number(smppt_setting_mppt, 18, "smppt_setting_mppt")
+	# call debug_write_text_eq_number(smppt_setting_force, 19, "smppt_setting_force")
+	# call debug_write_text_eq_number(smppt_setting_freq, 18, "smppt_setting_freq")
+	# call debug_write_text_eq_number(smppt_setting_dt, 16, "smppt_setting_dt")
+	# call debug_write_text_eq_number(smppt_setting_m1, 16, "smppt_setting_m1")
+	# call debug_write_text_eq_number(smppt_setting_m3, 16, "smppt_setting_m3")
+	
+end
+
+############################################
+

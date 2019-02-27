@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SMPPT</title>
+<link rel="stylesheet" href="style.css" media="screen"/>
+</head>
+<nav class="cls-nav-top">
+  <ul class="cls-menu-top">
+     <li class="cls-menu-top-logo"><img src="logoENEA.png"></li>
+     <li class="cls-menu-top-item"><a href="index.html">SMPPT Status</a></li>
+     <li class="cls-menu-top-item"><a href="smppt.html">SMPPT Settings</a></li>
+     <li class="cls-menu-top-item"><a href="wstatus.html">WiFi Status</a></li>
+     <li class="cls-menu-top-item"><a href="ap.html">Access Point</a></li>
+     <li class="cls-menu-top-item"><a href="sta.html">Station</a></li>
+  </ul>
+</nav>
+<body>
+<script>
+  var mySecurityModeList = [ "Open", "WPA-PSK", "WPA2-PSK", "WEP", "WPA2-PSK mixed-mode" ];
+
+  function updateStatus(status) {
+    if (status.mode == 1) {
+      document.getElementById("id-span-status-mode").innerHTML = "Station";
+      document.getElementById("id-div-ap").style.display = "none";
+    }
+    else {
+      document.getElementById("id-span-status-mode").innerHTML = "Access Point";
+      document.getElementById("id-div-ap").style.display = "block";
+      document.getElementById("id-span-status-channel").innerHTML = status.settings.channel;
+      document.getElementById("id-span-status-security").innerHTML = mySecurityModeList[status.settings.security];
+    }
+
+    document.getElementById("id-span-status-ssid").innerHTML = status.settings.ssid;
+    document.getElementById("id-span-status-bssid").innerHTML = status.settings.bssid;
+  }
+
+  function doGetStatus() {
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        if (xhr.status === 200) {
+          updateStatus(JSON.parse(xhr.responseText));
+        }
+      }
+    };
+    xhr.open("GET", "/api/status", true);
+    xhr.send();
+  }
+
+  window.onload = function() {
+      doGetStatus();
+  };
+</script>
+<h1 class="cls-heading">Current configuration:</h1>
+<span class="cls-span-status">Mode:</span><span id="id-span-status-mode"></span><br>
+<span class="cls-span-status">SSID:</span><span id="id-span-status-ssid"></span><br>
+<span class="cls-span-status">BSSID:</span><span id="id-span-status-bssid"></span><br>
+<div id="id-div-ap" style="display:none">
+  <span class="cls-span-status">Channel:</span><span id="id-span-status-channel"></span><br>
+  <span class="cls-span-status">Security:</span><span id="id-span-status-security"></span><br>
+</div>
+</body>
+</html>

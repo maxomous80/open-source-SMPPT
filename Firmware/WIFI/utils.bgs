@@ -1,0 +1,12 @@
+
+export const char_slash() = "/"
+export const char_colon() = ":"
+export const char_dash() = "-"
+export const char_space() = " "
+export const char_equal() = "="
+export const char_zero() = "0"
+export const char_hash() = "#"
+export const char_len = 1
+
+export const crlf() = "\r\n"
+export const crlf_len = 2

@@ -1,0 +1,75 @@
+
+export const DEBUG = 1
+
+export const DEBUG_ENDPOINT = 1		# 1 = USART1
+
+dim debug_string_length
+dim debug_string(255)
+dim debug_string_len_start
+dim debug_string_len_stop
+
+dim debug_itoa_buffer(10)
+dim debug_itoa_buffer_len
+
+const debug_buf_split = 240
+
+###############################################
+
+procedure add_chars_to_buffer(chars_buffer_len, chars_buffer())
+	memcpy(debug_string(debug_string_length),chars_buffer(0),chars_buffer_len)
+	debug_string_length = debug_string_length + chars_buffer_len
+end
+
+procedure add_int_to_buffer(number_to_add)
+	call util_itoa(number_to_add)(debug_itoa_buffer_len, debug_itoa_buffer(0:debug_itoa_buffer_len))
+	call add_chars_to_buffer(debug_itoa_buffer_len, debug_itoa_buffer(0:debug_itoa_buffer_len))
+end
+
+procedure reset_buffer()
+	debug_string_length = 0
+end
+
+###############################################
+
+export procedure debug_write_number(number_to_write)
+	call util_itoa(number_to_write)(debug_string_length, debug_string(0:debug_string_length))
+	call endpoint_send(DEBUG_ENDPOINT, debug_string_length, debug_string(0:debug_string_length))
+end
+
+export procedure debug_write_text_eq_number(number_to_write, text_to_write_length, text_to_write())
+	if DEBUG then
+		# call endpoint_send(DEBUG_ENDPOINT,text_to_write_length,text_to_write(0:text_to_write_length))
+		# call debug_write_number(number_to_write)
+		# call endpoint_send(DEBUG_ENDPOINT,2,"\r\n")
+		call reset_buffer()
+		call add_chars_to_buffer(text_to_write_length, text_to_write(0:text_to_write_length))
+		call add_chars_to_buffer(char_len, char_equal(0:char_len))
+		call add_int_to_buffer(number_to_write)
+		call endpoint_send(DEBUG_ENDPOINT,debug_string_length,debug_string(0:debug_string_length))
+	end if
+end
+
+export procedure debug_write_text(text_to_write_length, text_to_write())
+	if DEBUG then
+		call endpoint_send(DEBUG_ENDPOINT,text_to_write_length,text_to_write(0:text_to_write_length))
+	end if
+end
+
+export procedure debug_write_text_big(text_to_write_length, text_to_write())
+	if DEBUG then
+		debug_string_len_start = 0
+		debug_string_len_stop = debug_string_len_start + debug_buf_split
+call debug_write_number(text_to_write_length)
+call debug_write_number(debug_string_len_start)
+call debug_write_number(debug_string_len_stop)
+		while debug_string_len_stop < text_to_write_length
+			call endpoint_send(DEBUG_ENDPOINT,debug_buf_split,text_to_write(debug_string_len_start:debug_string_len_stop))
+			debug_string_len_start = debug_string_len_stop
+			debug_string_len_stop = debug_string_len_stop + debug_buf_split
+call debug_write_number(debug_string_len_start)
+call debug_write_number(debug_string_len_stop)
+		end while
+		debug_string_len_stop = text_to_write_length -  debug_string_len_start
+		call endpoint_send(DEBUG_ENDPOINT,debug_string_len_stop,text_to_write(debug_string_len_start:debug_string_len_stop))
+	end if
+end

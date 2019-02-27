@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<usb>
+    <!-- The modifiable values in the device descriptor
+         idVendor - vendor ID (assigned by the USB-IF)
+         idProduct - product ID (assigned by the manufacturer)
+         iManufacturer - string describing the manufacturer
+         iProduct - string describing the product
+         iSerialNumber - string describing the serial number of the device
+
+         Note that if idVendor or idProduct values are changed,
+         the Windows setup information file (wgm110.inf) provided
+         as part of the SDK will no longer work and the manufacturer
+         has to provide their own.
+
+         Modifying any other value is NOT supported.
+    -->
+    <device
+        bDeviceClass="2"
+        bMaxPacketSize="20"
+        bcdDevice="1"
+        idVendor="10c4"
+        idProduct="1000"
+        iManufacturer="Silicon Labs"
+        iProduct="WGM110"
+        iSerialNumber="1"
+        bcdUSB="200">
+        <!-- Modifying any part of the configuration descriptor is NOT supported -->
+        <configuration
+            iConfiguration="CDC"
+            bmAttributes="C0"
+            bMaxPower="C8">
+            <interface
+                bInterfaceClass="2"
+                bInterfaceSubClass="2"
+                bInterfaceProtocol="1"
+                iInterface="CDC control">
+                <descriptor Type="24">
+                    <data>001001</data>
+                </descriptor>
+                <descriptor Type="24">
+                    <data>0202</data>
+                </descriptor>
+                <descriptor Type="24">
+                    <data>060001</data>
+                </descriptor>
+                <descriptor Type="24">
+                    <data>010001</data>
+                </descriptor>
+                <endpoint bEndpointAddress="81" bmAttributes="3" wMaxPacketSize="8" bInterval="2">
+                </endpoint>
+            </interface>
+            <interface
+                bInterfaceClass="A"
+                bInterfaceSubClass="0"
+                bInterfaceProtocol="0"
+                iInterface="CDC data">
+                <endpoint bEndpointAddress="2" bmAttributes="2" wMaxPacketSize="40" bInterval="1">
+                </endpoint>
+                <endpoint bEndpointAddress="82" bmAttributes="2" wMaxPacketSize="40" bInterval="1">
+                </endpoint>
+            </interface>
+        </configuration>
+    </device>
+</usb>

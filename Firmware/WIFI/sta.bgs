@@ -1,0 +1,152 @@
+# sta.bgs - station script file for HTTP server example
+
+# Constants
+const STA_MAX_RECONNECTS = 3                # Maximum amount of reconnection attempts
+const STA_RECONNECTION_DELAY = 5000         # The amount of milliseconds to wait between reconnection attempts
+
+# Variables
+dim sta_reconnect_count                     # Current amount of reconnection attempts
+dim sta_dhcp_enabled                        # STA DHCP enabled
+dim sta_ipv4_addr                           # STA IP address
+dim sta_ipv4_netmask                        # STA netmask
+dim sta_ipv4_gw                             # STA gateway
+dim sta_ipv4_dns1                           # STA DNS #1
+dim sta_ipv4_dns2                           # STA DNS #2
+
+# Procedure for initialising STA mode variables.
+export procedure sta_init_mode()
+  # Initialise variables
+  sta_reconnect_count = 0
+  sta_dhcp_enabled = 1
+  sta_ipv4_addr = 0
+  sta_ipv4_netmask = 0
+  sta_ipv4_gw = 0
+  sta_ipv4_dns1 = 0
+  sta_ipv4_dns2 = 0
+end
+
+# Procedure for reading STA IP configuration.
+procedure sta_set_read_ipv4_config()
+  # Read DHCP enabled from PS.
+  call flash_ps_load(FLASH_PS_KEY_STA_DHCP_ENABLED)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    sta_dhcp_enabled = cmd_value(0:cmd_value_len)
+  else
+    # Store the default to PS since this key is not automatically updated by the stack.
+    call flash_ps_save(FLASH_PS_KEY_STA_DHCP_ENABLED, 4, sta_dhcp_enabled)
+  end if
+
+  # Read STA IP address from PS.
+  call flash_ps_load(FLASH_PS_KEY_STA_IPV4_ADDR)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    sta_ipv4_addr = cmd_value(0:cmd_value_len)
+  end if
+
+  # Read STA netmask from PS.
+  call flash_ps_load(FLASH_PS_KEY_STA_IPV4_NETMASK)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    sta_ipv4_netmask = cmd_value(0:cmd_value_len)
+  end if
+
+  # Read STA gateway from PS.
+  call flash_ps_load(FLASH_PS_KEY_STA_IPV4_GW)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    sta_ipv4_gw = cmd_value(0:cmd_value_len)
+  end if
+
+  # Read STA DNS #1 from PS.
+  call flash_ps_load(FLASH_PS_KEY_STA_IPV4_DNS1)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    sta_ipv4_dns1 = cmd_value(0:cmd_value_len)
+  end if
+
+  # Read STA DNS #2 from PS.
+  call flash_ps_load(FLASH_PS_KEY_STA_IPV4_DNS2)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    sta_ipv4_dns2 = cmd_value(0:cmd_value_len)
+  end if
+end
+
+# Procecure for restoring AP mode to factory settings.
+export procedure sta_reset_mode()
+  call flash_ps_erase(FLASH_PS_KEY_STA_DHCP_ENABLED)
+  call flash_ps_erase(FLASH_PS_KEY_STA_IPV4_ADDR)
+  call flash_ps_erase(FLASH_PS_KEY_STA_IPV4_NETMASK)
+  call flash_ps_erase(FLASH_PS_KEY_STA_IPV4_GW)
+  call flash_ps_erase(FLASH_PS_KEY_STA_IPV4_DNS1)
+  call flash_ps_erase(FLASH_PS_KEY_STA_IPV4_DNS2)
+end
+
+# Procedure for starting STA mode.
+export procedure sta_start_mode()
+  # Read STA IP configuration from PS.
+  call sta_set_read_ipv4_config()
+
+  # Set static IP configuration if DHCP is not enabled
+  if sta_dhcp_enabled = 0
+    call tcpip_configure(sta_ipv4_addr, sta_ipv4_netmask, sta_ipv4_gw, 0)
+
+    # Set static DNS configuration if set
+    if sta_ipv4_dns1 != 0
+      call tcpip_dns_configure(0, sta_ipv4_dns1)
+    end if
+    if sta_ipv4_dns2 != 0
+      call tcpip_dns_configure(1, sta_ipv4_dns1)
+    end if
+  else
+    call tcpip_configure(0, 0, 0, 1)
+  end if
+
+  # Disable HTTP, DHCP and DNS servers
+  call https_enable(0, 0, 0)
+
+  # Read STA passphrase from PS and set it. Ignored if not found from PS.
+  call flash_ps_load(FLASH_PS_KEY_CLIENT_PW)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    call sme_set_password(cmd_value_len, cmd_value(0:cmd_value_len))
+  end if
+
+  # Read STA SSID from PS and initiate a connection attempt.
+  call flash_ps_load(FLASH_PS_KEY_CLIENT_SSID)(cmd_result, cmd_value_len, cmd_value(0:cmd_value_len))
+  if cmd_result = 0
+    ssid_len = cmd_value_len
+    memcpy(ssid(0), cmd_value(0), ssid_len)
+
+    # This call will trigger either sme_connected() event if the attempt
+    # succeeds or sme_connect_failed() if it fails.
+    call sme_connect_ssid(ssid_len, ssid(0:ssid_len))
+  else
+    # We don't have a valid SSID defined in PS. Indicate error state via the status notification service.
+    call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_STA, STATUS_INTERVAL_ERROR)
+  end if
+end
+
+# Event received after a connection attempt succeeds.
+event sme_connected(status, hw_interface, ap_bssid)
+  # Store BSSID.
+  memcpy(bssid(0), ap_bssid(0), 6)
+  # Indicate connected state via the status notification service.
+  call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_STA, STATUS_INTERVAL_CONNECTED)
+end
+
+# Event received after a connection attempt fails.
+event sme_connect_failed(reason, hw_interface)
+  sta_reconnect_count = sta_reconnect_count + 1
+  if(sta_reconnect_count < STA_MAX_RECONNECTS)
+    # Set a timer for a reconnection attempt.
+    call hardware_set_soft_timer(STA_RECONNECTION_DELAY, TIMER_RECONNECTION, 1)
+  else
+    # Indicate error state via the status notification service.
+    call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_STA, STATUS_INTERVAL_ERROR)
+  end if
+end
+
+# Event received when disconnected from the network.
+event sme_disconnected(reason, hw_interface)
+  # Indicate connecting state via the status notification service.
+  call start_status_notification(STATUS_PIN_INDEX, STATUS_PIN_STA, STATUS_INTERVAL_CONNECTING)
+
+  # Try reconnecting to the network using the same connection logic as with the first connect.
+  sta_reconnect_count = 0
+  call sme_connect_ssid(ssid_len, ssid(0:ssid_len))
+end
